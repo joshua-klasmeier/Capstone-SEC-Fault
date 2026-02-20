@@ -1,4 +1,7 @@
+"use client";
+
 import { messages, conversationTitle } from "@/lib/mockData";
+import { Copy, ThumbsUp, ThumbsDown, RotateCw } from "lucide-react";
 
 function renderBoldText(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -12,76 +15,6 @@ function renderBoldText(text: string) {
     }
     return part;
   });
-}
-
-function CopyIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-    </svg>
-  );
-}
-
-function ThumbsUpIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-    </svg>
-  );
-}
-
-function ThumbsDownIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
-    </svg>
-  );
-}
-
-function RetryIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="23 4 23 10 17 10" />
-      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-    </svg>
-  );
 }
 
 export default function ChatMessages() {
@@ -115,16 +48,16 @@ export default function ChatMessages() {
                 </div>
                 <div className="flex gap-1">
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <CopyIcon />
+                    <Copy className="h-3.5 w-3.5" />
                   </button>
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <ThumbsUpIcon />
+                    <ThumbsUp className="h-3.5 w-3.5" />
                   </button>
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <ThumbsDownIcon />
+                    <ThumbsDown className="h-3.5 w-3.5" />
                   </button>
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <RetryIcon />
+                    <RotateCw className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>

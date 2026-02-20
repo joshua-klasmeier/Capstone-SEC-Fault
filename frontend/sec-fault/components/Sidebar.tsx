@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, FileText, History } from "lucide-react";
+import { Home, FileText, History, Plus } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -35,6 +35,17 @@ export default function Sidebar() {
         <span className="text-lg font-semibold text-text-primary">
           SEC Fault
         </span>
+      </div>
+
+      {/* New Analysis Button */}
+      <div className="px-3 pb-4">
+        <Link
+          href="/analyze"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" />
+          New Analysis
+        </Link>
       </div>
 
       {/* Navigation */}

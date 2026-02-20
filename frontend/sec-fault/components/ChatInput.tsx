@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowUp } from "lucide-react";
 
 export default function ChatInput() {
   const [value, setValue] = useState("");
@@ -17,19 +18,7 @@ export default function ChatInput() {
             className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-secondary outline-none"
           />
           <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-opacity hover:opacity-80">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="12" y1="19" x2="12" y2="5" />
-              <polyline points="5 12 12 5 19 12" />
-            </svg>
+            <ArrowUp className="h-4 w-4" />
           </button>
         </div>
         <p className="mt-2 text-center text-xs text-text-secondary">
