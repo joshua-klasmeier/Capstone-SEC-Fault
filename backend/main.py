@@ -1,15 +1,40 @@
-from fastapi import FastAPI
+import os
+
+from authlib.integrations.starlette_client import OAuth
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.requests import Request
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+GOOGLE_REDIRECT_URI = os.getenv(
+    "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback"
+)
 
 app = FastAPI(title="SEC Fault API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET_KEY", "dev-session-secret-change-me"),
+)
+
+oauth = OAuth()
+oauth.register(
+    name="google",
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
 )
 
 # Unsure how exactly logging in works with Google. Below request might need changed
@@ -24,6 +49,7 @@ class NewChatRequest(BaseModel):
 
 class NewMsgRequest(BaseModel):
     message: str
+
 
 
 @app.get("/health")
