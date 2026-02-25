@@ -35,11 +35,6 @@ app.add_middleware(
     secret_key=os.getenv("SESSION_SECRET_KEY", "dev-session-secret-change-me"),
 )
 
-
-class ChatRequest(BaseModel):
-    message: str
-
-
 oauth = OAuth()
 oauth.register(
     name="google",
@@ -48,17 +43,6 @@ oauth.register(
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={"scope": "openid email profile"},
 )
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-@app.post("/chat")
-def chat(req: ChatRequest):
-    return {"reply": "This is a placeholder response from SEC Fault API."}
-
 
 @app.get("/auth/login")
 async def login(request: Request):
@@ -145,3 +129,28 @@ def auth_logout(response: Response):
         secure=COOKIE_SECURE,
     )
     return response
+
+
+
+
+class NewChatRequest(BaseModel):
+    name: str
+
+class NewMsgRequest(BaseModel):
+    message: str
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.post("/chats")
+def newChat(req: NewChatRequest):
+    return {"chat_info": "This is a placeholder response from SEC Fault API."}
+
+@app.get("/chats/{id}")
+def getChat(id: int):
+    return {"chat_and_msg_info": "This is a placeholder response from SEC Fault API."}
+
+@app.post("/chats/{id}/messages")
+def msg(id: int, req: NewMsgRequest):
+    return {"msg_reply": "This is a placeholder response from SEC Fault API."}
