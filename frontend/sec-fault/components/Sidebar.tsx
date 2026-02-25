@@ -2,28 +2,88 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Home, FileText, History, Plus } from "lucide-react";
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+type SidebarUser = {
+  name: string | null;
+  email: string | null;
+};
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [user, setUser] = useState<SidebarUser | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    async function fetchUser() {
+      try {
+        const res = await fetch(`${API_URL}/auth/me`, {
+          credentials: "include",
+        });
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        if (data?.user) {
+          setUser({
+            name: data.user.name ?? null,
+            email: data.user.email ?? null,
+          });
+        }
+      } catch {
+        // Ignore auth errors in sidebar.
+      }
+    }
+
+    fetchUser();
+  }, []);
 
   const navItems = [
-    { 
-      href: "/", 
-      label: "Home", 
-      icon: Home
+    {
+      href: "/",
+      label: "Home",
+      icon: Home,
     },
-    { 
-      href: "/filings", 
-      label: "SEC Filings", 
-      icon: FileText
+    {
+      href: "/filings",
+      label: "SEC Filings",
+      icon: FileText,
     },
-    { 
-      href: "/history", 
-      label: "History", 
-      icon: History
+    {
+      href: "/history",
+      label: "History",
+      icon: History,
     },
   ];
+
+  const initials = (() => {
+    const source = user?.name || user?.email;
+    if (!source) return "U";
+    const parts = source.split(/\s+/).filter(Boolean);
+    if (!parts.length) return "U";
+    return parts
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("");
+  })();
+
+  async function handleLogout() {
+    try {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Ignore network errors on logout.
+    } finally {
+      setUser(null);
+      setMenuOpen(false);
+    }
+  }
 
   return (
     <aside className="flex h-screen w-72 flex-col border-r border-border bg-sidebar">
@@ -72,16 +132,42 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* User Profile */}
+      {/* User Profile / Login */}
       <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-sm font-medium text-white">
-            JK
+        {user ? (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              className="flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left hover:bg-surface"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-sm font-medium text-white">
+                {initials}
+              </div>
+              <span className="text-sm font-medium text-text-primary">
+                {user.name ?? user.email}
+              </span>
+            </button>
+            {menuOpen && (
+              <div className="absolute bottom-11 left-0 w-40 rounded-lg border border-border bg-surface shadow-lg">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-sidebar"
+                >
+                  Log out
+                </button>
+              </div>
+            )}
           </div>
-          <span className="text-sm font-medium text-text-primary">
-            Josh K.
-          </span>
-        </div>
+        ) : (
+          <Link
+            href="/login"
+            className="flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            Login with Google
+          </Link>
+        )}
       </div>
     </aside>
   );
