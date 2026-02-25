@@ -13,6 +13,13 @@ GOOGLE_REDIRECT_URI = os.getenv(
     "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback"
 )
 
+# When frontend and backend live on different domains (production),
+# cookies must use SameSite=None + Secure so the browser sends them
+# on cross-origin fetch requests with credentials: "include".
+IS_PROD = FRONTEND_URL.startswith("https://")
+COOKIE_SAMESITE: str = "none" if IS_PROD else "lax"
+COOKIE_SECURE: bool = IS_PROD
+
 app = FastAPI(title="SEC Fault API")
 
 app.add_middleware(
@@ -90,8 +97,8 @@ async def auth_callback(request: Request):
             key="sec_fault_user_name",
             value=display_name,
             httponly=True,
-            secure=FRONTEND_URL.startswith("https://"),
-            samesite="lax",
+            secure=COOKIE_SECURE,
+            samesite=COOKIE_SAMESITE,
         )
 
     if email:
@@ -99,8 +106,8 @@ async def auth_callback(request: Request):
             key="sec_fault_user_email",
             value=email,
             httponly=True,
-            secure=FRONTEND_URL.startswith("https://"),
-            samesite="lax",
+            secure=COOKIE_SECURE,
+            samesite=COOKIE_SAMESITE,
         )
 
     return response
@@ -129,10 +136,12 @@ def auth_logout(response: Response):
     response = Response(status_code=204)
     response.delete_cookie(
         key="sec_fault_user_name",
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
     )
     response.delete_cookie(
         key="sec_fault_user_email",
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
     )
     return response
