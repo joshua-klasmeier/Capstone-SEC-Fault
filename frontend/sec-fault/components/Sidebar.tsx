@@ -132,6 +132,32 @@ export default function Sidebar() {
         </div>
       </nav>
 
+      {/* Footer Links */}
+      <div className="px-3 pb-3 border-t border-border pt-3">
+        <div className="flex flex-col gap-1">
+          <Link
+            href="/about"
+            className={`px-3 py-2 text-xs font-medium transition-colors rounded-lg ${
+              pathname === "/about"
+                ? "text-text-primary bg-surface"
+                : "text-text-secondary hover:text-text-primary hover:bg-surface"
+            }`}
+          >
+            About Us
+          </Link>
+          <Link
+            href="/terms"
+            className={`px-3 py-2 text-xs font-medium transition-colors rounded-lg ${
+              pathname === "/terms"
+                ? "text-text-primary bg-surface"
+                : "text-text-secondary hover:text-text-primary hover:bg-surface"
+            }`}
+          >
+            Terms & Conditions
+          </Link>
+        </div>
+      </div>
+
       {/* User Profile / Login */}
       <div className="border-t border-border px-4 py-3">
         {user ? (
