@@ -1,12 +1,25 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
-import { Scale } from "lucide-react";
+import { Scale, Menu } from "lucide-react";
+import { useState } from "react";
 
 export default function TermsPage() {
+  const [sideBarOpen, setSideBarOpen] = useState(false);
+
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
+      {/* Toggle Button */}
+      {!sideBarOpen && (
+        <button
+          onClick={() => setSideBarOpen(true)}
+          className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-accent text-white hover:opacity-90"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+
+      {sideBarOpen && <Sidebar toggleSidebar={() => setSideBarOpen(false)} />}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 py-12">
           {/* Header */}

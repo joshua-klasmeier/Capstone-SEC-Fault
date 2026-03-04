@@ -1,7 +1,7 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
-import { Sparkles, FileText, MessageSquarePlus, Bookmark } from "lucide-react";
+import { Sparkles, FileText, MessageSquarePlus, Bookmark, Menu} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 export default function Home() {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
+  const [sideBarOpen, setSideBarOpen] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +25,18 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
+      {/* Toggle Button */}
+      {!sideBarOpen && (
+        <button
+        onClick={() => setSideBarOpen(true)}
+        className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-accent text-white hover:opacity-90"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+      
+      {sideBarOpen && <Sidebar toggleSidebar={() => setSideBarOpen(false)} />}
+
       <main className="flex flex-1 flex-col overflow-y-auto">
         {/* Hero Section with Prompt Input */}
         <div className="flex flex-1 flex-col items-center justify-center px-8 py-12">

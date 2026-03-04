@@ -1,13 +1,28 @@
+"use client";
 import Sidebar from "@/components/Sidebar";
 import { filingHistory } from "@/lib/mockData";
-import { ChevronRight, FileText } from "lucide-react";
+import { ChevronRight, FileText, Menu } from "lucide-react";
+import { useState } from "react";
 
 export default function HistoryPage() {
+  const [sideBarOpen, setSideBarOpen] = useState(false);
+
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
+      {/* Toggle Button */}
+      {!sideBarOpen && (
+        <button
+          onClick={() => setSideBarOpen(true)}
+          className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-accent text-white hover:opacity-90"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+
+      {sideBarOpen && <Sidebar toggleSidebar={() => setSideBarOpen(false)} />}
+      
       <main className="flex flex-1 flex-col overflow-y-auto">
-        <div className="px-8 py-8">
+        <div className="max-w-4xl mx-auto px-8 py-12">
           <h1 className="text-3xl font-bold text-text-primary mb-2">
             SEC Filings History
           </h1>

@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
+from dotenv import load_dotenv
+load_dotenv()
+
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 GOOGLE_REDIRECT_URI = os.getenv(
     "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback"

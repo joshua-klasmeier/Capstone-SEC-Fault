@@ -1,12 +1,28 @@
+"use client";
 import Sidebar from "@/components/Sidebar";
-import { Info } from "lucide-react";
+import { Info, Menu } from "lucide-react";
+import { useState } from "react";
+
 
 export default function FilingsPage() {
+  const [sideBarOpen, setSideBarOpen] = useState(false);
+
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
-      <main className="flex flex-1 flex-col overflow-y-auto">
-        <div className="px-8 py-12">
+      {/* Toggle Button */}
+      {!sideBarOpen && (
+        <button
+          onClick={() => setSideBarOpen(true)}
+          className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-accent text-white hover:opacity-90"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+
+      {sideBarOpen && <Sidebar toggleSidebar={() => setSideBarOpen(false)} />}
+
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-8 py-12">
           <h1 className="text-3xl font-bold text-text-primary mb-3">
             SEC Filings Search
           </h1>

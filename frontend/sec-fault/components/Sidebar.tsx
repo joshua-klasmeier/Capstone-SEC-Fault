@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, FileText, History, Plus } from "lucide-react";
+import { Home, FileText, History, Plus, Menu } from "lucide-react";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -13,7 +13,11 @@ type SidebarUser = {
   email: string | null;
 };
 
-export default function Sidebar() {
+type SidebarProps = {
+  toggleSidebar?: () => void;
+};
+
+export default function Sidebar({ toggleSidebar }: SidebarProps) {
   const pathname = usePathname();
   const [user, setUser] = useState<SidebarUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -86,15 +90,25 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-72 flex-col border-r border-border bg-sidebar">
+    <aside className="flex h-screen w-75 flex-col border-r border-border bg-sidebar">
       {/* Branding */}
-      <div className="flex items-center gap-2 px-5 pt-5 pb-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
-          <FileText className="h-4 w-4 text-white" />
+      <div className="flex items-center justify-between px-3 pt-5 pb-6">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
+            <FileText className="h-4 w-4 text-white" />
+          </div>
+          <span className="text-lg font-semibold text-text-primary">
+            SEC Fault
+          </span>
         </div>
-        <span className="text-lg font-semibold text-text-primary">
-          SEC Fault
-        </span>
+        {toggleSidebar && (
+            <button
+              onClick={toggleSidebar}
+              className="p-1 rounded hover:bg-surface text-text-secondary hover:text-text-primary"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+      )}
       </div>
 
       {/* New Analysis Button */}
