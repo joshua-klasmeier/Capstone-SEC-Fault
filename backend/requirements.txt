@@ -9,6 +9,7 @@ asyncpg
 psycopg2-binary
 beautifulsoup4
 lxml
+google-generativeai
 sec-edgar-downloader
 pytest
 pytest-asyncio
