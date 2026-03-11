@@ -7,5 +7,6 @@ python-dotenv
 sqlalchemy[asyncio]
 asyncpg
 psycopg2-binary
+sec-edgar-downloader
 pytest
 pytest-asyncio
