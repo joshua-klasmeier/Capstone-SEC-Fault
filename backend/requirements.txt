@@ -10,6 +10,8 @@ psycopg2-binary
 beautifulsoup4
 lxml
 google-generativeai
+qdrant-client
+redis
 sec-edgar-downloader
 pytest
 pytest-asyncio
