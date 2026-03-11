@@ -3,3 +3,15 @@ uvicorn[standard]
 authlib
 itsdangerous
 httpx
+python-dotenv
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+beautifulsoup4
+lxml
+google-generativeai
+qdrant-client
+redis
+sec-edgar-downloader
+pytest
+pytest-asyncio
