@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db.database import init_db
+from routers.ingestion import router as ingestion_router
 
 
 @asynccontextmanager
@@ -34,6 +35,8 @@ COOKIE_SAMESITE: str = "none" if IS_PROD else "lax"
 COOKIE_SECURE: bool = IS_PROD
 
 app = FastAPI(title="SEC Fault API", lifespan=lifespan)
+
+app.include_router(ingestion_router)
 
 app.add_middleware(
     CORSMiddleware,

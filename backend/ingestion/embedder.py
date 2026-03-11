@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 import warnings
@@ -17,6 +18,25 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 _MODEL = "models/gemini-embedding-001"
 _BATCH_SIZE = 100
 _EXPECTED_DIM = 3072
+_MAX_RETRIES = 3
+
+logger = logging.getLogger(__name__)
+
+
+def _embed_with_retry(model, content, task_type, retries=_MAX_RETRIES):
+    """Call embed_content with exponential back-off on rate-limit errors."""
+    for attempt in range(retries):
+        try:
+            return genai.embed_content(
+                model=model, content=content, task_type=task_type
+            )
+        except Exception as exc:
+            if "429" in str(exc) and attempt < retries - 1:
+                wait = 20 * (attempt + 1)
+                logger.warning("Rate limited, waiting %ds (attempt %d)", wait, attempt + 1)
+                time.sleep(wait)
+            else:
+                raise
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
@@ -33,13 +53,9 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
             time.sleep(0.5)
 
         if start > 0 and start % _BATCH_SIZE == 0:
-            print(f"  Embedding progress: {start}/{len(texts)} chunks")
+            logger.info("Embedding progress: %d/%d chunks", start, len(texts))
 
-        result = genai.embed_content(
-            model=_MODEL,
-            content=batch,
-            task_type="retrieval_document",
-        )
+        result = _embed_with_retry(_MODEL, batch, "retrieval_document")
 
         embeddings = result["embedding"]
         # Single-text batches return a flat list instead of list-of-lists.
@@ -56,11 +72,7 @@ def embed_query(query: str) -> list[float]:
     if not query:
         raise ValueError("query must not be empty")
 
-    result = genai.embed_content(
-        model=_MODEL,
-        content=query,
-        task_type="retrieval_query",
-    )
+    result = _embed_with_retry(_MODEL, query, "retrieval_query")
     return result["embedding"]
 
 
