@@ -1,7 +1,16 @@
 "use client";
 
-import { messages, conversationTitle } from "@/lib/mockData";
 import { Copy, ThumbsUp, ThumbsDown, RotateCw } from "lucide-react";
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface ChatMessagesProps {
+  messages: Message[];
+}
 
 function renderBoldText(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -17,13 +26,14 @@ function renderBoldText(text: string) {
   });
 }
 
-export default function ChatMessages() {
+export default function ChatMessages({ messages}: ChatMessagesProps) {
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Title Bar */}
       <div className="border-b border-border px-6 py-4">
         <h1 className="text-lg font-semibold text-text-primary">
-          {conversationTitle}
+          SEC Filing Analysis
         </h1>
       </div>
 
@@ -33,7 +43,7 @@ export default function ChatMessages() {
           {messages.map((msg) =>
             msg.role === "user" ? (
               <div key={msg.id} className="flex justify-end">
-                <div className="max-w-[75%] rounded-2xl rounded-br-md bg-user-bubble px-4 py-3 text-sm leading-relaxed text-white">
+                <div className="max-w-[75%] rounded-2xl rounded-br-md bg-accent px-4 py-3 text-sm leading-relaxed text-white">
                   {msg.content}
                 </div>
               </div>
@@ -48,21 +58,22 @@ export default function ChatMessages() {
                 </div>
                 <div className="flex gap-1">
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <Copy className="h-3.5 w-3.5" />
+                    <Copy className="h-3 w-3" />
                   </button>
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <ThumbsUp className="h-3.5 w-3.5" />
+                    <ThumbsUp className="h-3 w-3" />
                   </button>
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <ThumbsDown className="h-3.5 w-3.5" />
+                    <ThumbsDown className="h-3 w-3" />
                   </button>
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
-                    <RotateCw className="h-3.5 w-3.5" />
+                    <RotateCw className="h-3 w-3" />
                   </button>
                 </div>
               </div>
             )
           )}
+          
         </div>
       </div>
     </div>
