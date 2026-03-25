@@ -227,7 +227,13 @@ def msg(id: int, req: NewMsgRequest):
         
         User message: {req.message}
         
-        Provide a helpful response about SEC filings, financial analysis, or direct the user to search for specific company filings.
+        You are speaking to a non-finance professional. Your job is to:
+        - Give clear, simple summaries of SEC filings (10-K, 10-Q, 8-K)
+        - Highlight key financial metrics like revenue, profit, debt, and growth
+        - Explain any major risks the company has disclosed
+        - Point out anything unusual or important investors should know
+        - Use simple language — avoid heavy financial jargon
+        - Be concise but thorough
         """
         
         print(f"SENDING TO GEMINI:")
