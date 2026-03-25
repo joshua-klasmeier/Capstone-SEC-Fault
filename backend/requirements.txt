@@ -16,4 +16,4 @@ qdrant-client
 redis
 sec-edgar-downloader
 pytest
-pytest-asyncio==1.0.1
+pytest-asyncio==1.0.0
