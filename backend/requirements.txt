@@ -5,4 +5,15 @@ itsdangerous==2.2.0
 httpx==0.27.2
 starlette==0.38.6
 google-genai==1.1.0
-python-dotenv==1.0.1
+google-generativeai
+python-dotenv
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+beautifulsoup4
+lxml
+qdrant-client
+redis
+sec-edgar-downloader
+pytest
+pytest-asyncio==1.0.1

@@ -5,14 +5,16 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useEffect, useRef } from "react";
 
-interface Message {
+export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
+  suggestions?: string[];
 }
 
 interface ChatMessagesProps {
   messages: Message[];
+  onSuggestionClick: (text: string) => void;
   loading?: boolean;
 }
 
@@ -33,7 +35,7 @@ function LoadingIndicator() {
   );
 }
 
-export default function ChatMessages({ messages, loading }: ChatMessagesProps) {
+export default function ChatMessages({ messages, loading , onSuggestionClick }: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,17 +43,14 @@ export default function ChatMessages({ messages, loading }: ChatMessagesProps) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, loading]);
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Title Bar */}
       <div className="border-b border-border px-6 py-4 bg-surface/50 backdrop-blur-sm">
         <h1 className="text-lg font-semibold text-text-primary">
           SEC Filing Analysis
         </h1>
       </div>
 
-      {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-6">
           {messages.map((msg) =>
@@ -116,6 +115,22 @@ export default function ChatMessages({ messages, loading }: ChatMessagesProps) {
                     {msg.content}
                   </ReactMarkdown>
                 </div>
+
+                {/* Suggestion pills */}
+                {msg.suggestions && msg.suggestions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {msg.suggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => onSuggestionClick(s)}
+                        className="px-3 py-1 text-xs rounded-full border border-border text-text-secondary hover:bg-accent hover:text-white hover:border-accent transition-colors"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex gap-1">
                   <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
                     <Copy className="h-3.5 w-3.5" />

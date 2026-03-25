@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, FileText, History, Plus, Menu } from "lucide-react";
+import { Home, FileText, History, Plus, Menu, MessageSquare } from "lucide-react";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -13,11 +13,27 @@ type SidebarUser = {
   email: string | null;
 };
 
-type SidebarProps = {
-  toggleSidebar?: () => void;
+type ConversationItem = {
+  id: string;
+  title: string | null;
+  created_at: string;
 };
 
-export default function Sidebar({ toggleSidebar }: SidebarProps) {
+type SidebarProps = {
+  toggleSidebar?: () => void;
+  conversations?: ConversationItem[];
+  activeChatId?: string | null;
+  onSelectChat?: (id: string) => void;
+  onNewChat?: () => void;
+};
+
+export default function Sidebar({
+  toggleSidebar,
+  conversations,
+  activeChatId,
+  onSelectChat,
+  onNewChat,
+}: SidebarProps) {
   const pathname = usePathname();
   const [user, setUser] = useState<SidebarUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -113,17 +129,27 @@ export default function Sidebar({ toggleSidebar }: SidebarProps) {
 
       {/* New Analysis Button */}
       <div className="px-3 pb-4">
-        <Link
-          href="/analyze"
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" />
-          New Analysis
-        </Link>
+        {onNewChat ? (
+          <button
+            onClick={onNewChat}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            New Analysis
+          </button>
+        ) : (
+          <Link
+            href="/analyze"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            New Analysis
+          </Link>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3">
+      <nav className="px-3">
         <div className="flex flex-col gap-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
@@ -145,6 +171,34 @@ export default function Sidebar({ toggleSidebar }: SidebarProps) {
           })}
         </div>
       </nav>
+
+      {/* Conversation history */}
+      {conversations && conversations.length > 0 && (
+        <div className="flex-1 overflow-y-auto px-3 mt-4 border-t border-border pt-3">
+          <p className="px-3 mb-2 text-xs font-medium uppercase text-text-secondary tracking-wide">
+            Recent Chats
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {conversations.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => onSelectChat?.(c.id)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors truncate ${
+                  activeChatId === c.id
+                    ? "bg-surface text-text-primary shadow-sm"
+                    : "text-text-secondary hover:bg-surface hover:text-text-primary"
+                }`}
+              >
+                <MessageSquare className="h-4 w-4 shrink-0" />
+                <span className="truncate">{c.title || "Untitled"}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Spacer when no conversations */}
+      {(!conversations || conversations.length === 0) && <div className="flex-1" />}
 
       {/* Footer Links */}
       <div className="px-3 pb-3 border-t border-border pt-3">

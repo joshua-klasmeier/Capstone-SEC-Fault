@@ -1,16 +1,26 @@
 import os
-import google.genai as genai
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 load_dotenv()
+
+from db.database import init_db
+from routers.ingestion import router as ingestion_router
+from routers.conversations import router as conversations_router
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    await init_db()
+    yield
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 GOOGLE_REDIRECT_URI = os.getenv(
@@ -24,13 +34,10 @@ IS_PROD = FRONTEND_URL.startswith("https://")
 COOKIE_SAMESITE: str = "none" if IS_PROD else "lax"
 COOKIE_SECURE: bool = IS_PROD
 
-app = FastAPI(title="SEC Fault API")
+app = FastAPI(title="SEC Fault API", lifespan=lifespan)
 
-# Configure Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    client = genai.Client(api_key=GEMINI_API_KEY)
-
+app.include_router(ingestion_router)
+app.include_router(conversations_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -140,102 +147,9 @@ def auth_logout(response: Response):
     )
     return response
 
-# NEED TO UPDATE AFTER PARSING IS COMPLETED
-class QueryRequest(BaseModel):
-    query: str
-    filing_data: str = ""  # Optional: SEC filing content to analyze
-
-class NewChatRequest(BaseModel):
-    name: str
-
-class NewMsgRequest(BaseModel):
-    message: str
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-@app.post("/chats")
-def newChat(req: NewChatRequest):
-    return {"chat_info": "This is a placeholder response from SEC Fault API."}
-
-@app.get("/chats/{id}")
-def getChat(id: int):
-    return {"chat_and_msg_info": "This is a placeholder response from SEC Fault API."}
-
-@app.post("/api/analyze")
-async def analyze_query(req: QueryRequest):
-    """
-    Analyze SEC filing data using Gemini AI
-    """
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API not configured")
-    
-    try:
-        prompt = f"""
-        You are an expert financial analyst. Analyze the following SEC filing data and answer the user's query in plain English.
-        
-        User Query: {req.query}
-        
-        SEC Filing Data: {req.filing_data}
-        
-        Please provide:
-        1. A clear, concise answer to the user's query
-        2. Key financial insights from the filing
-        3. Any important risks or opportunities mentioned
-        
-        Keep your response accessible to non-finance professionals.
-        """
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
-        
-        return {
-            "response": response.text,
-            "query": req.query
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating response: {str(e)}")
-
-@app.post("/chats/{id}/messages")
-def msg(id: int, req: NewMsgRequest):
-    """
-    Handle chat messages - integrate with Gemini for responses
-    """
-    if not GEMINI_API_KEY:
-        return {"msg_reply": "Gemini API not configured. This is a placeholder response."}
-    
-    try:
-        prompt = f"""
-        You are SEC Fault, an AI assistant that helps users understand SEC filings and financial reports.
-        
-        User message: {req.message}
-        
-        Provide a helpful response about SEC filings, financial analysis, or direct the user to search for specific company filings.
-        """
-        
-        print(f"SENDING TO GEMINI:")
-        print(f"User message: {req.message}")
-        print("=" * 50)
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
-        
-        print(f"GEMINI RESPONSE:")
-        print(f"Response: {response.text}")
-        print("=" * 50)
-        
-        return {"msg_reply": response.text}
-    
-    except Exception as e:
-        error_msg = f"Error generating response: {str(e)}"
-        print(f"GEMINI ERROR: {error_msg}")
-        return {"msg_reply": error_msg}
 
 if __name__ == "__main__":
     import uvicorn
