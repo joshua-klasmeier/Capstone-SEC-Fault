@@ -9,8 +9,19 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 load_dotenv()
+
+from db.database import init_db
+from routers.ingestion import router as ingestion_router
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    await init_db()
+    yield
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 GOOGLE_REDIRECT_URI = os.getenv(
@@ -24,7 +35,9 @@ IS_PROD = FRONTEND_URL.startswith("https://")
 COOKIE_SAMESITE: str = "none" if IS_PROD else "lax"
 COOKIE_SECURE: bool = IS_PROD
 
-app = FastAPI(title="SEC Fault API")
+app = FastAPI(title="SEC Fault API", lifespan=lifespan)
+
+app.include_router(ingestion_router)
 
 # Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
