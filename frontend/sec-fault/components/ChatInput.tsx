@@ -13,7 +13,8 @@ export interface Message {
 }
 
 interface ChatInputProps {
-  chatId: number;
+  chatId: string | null;
+  ensureChat: () => Promise<string>;
   onNewMessage: (userMessage: Message, assistantMessage: Message) => void;
 }
 
@@ -22,7 +23,7 @@ export interface ChatInputHandle {
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
-  ({ chatId, onNewMessage }, ref) => {
+  ({ chatId, ensureChat, onNewMessage }, ref) => {
     const [value, setValue] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -36,14 +37,21 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       };
 
       setLoading(true);
+      setValue("");
 
       try {
-        const response = await fetch(`${API_URL}/chats/${chatId}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ message: text }),
-        });
+        // Create conversation if this is the first message
+        const activeId = chatId ?? (await ensureChat());
+
+        const response = await fetch(
+          `${API_URL}/chats/${activeId}/messages`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ message: text }),
+          }
+        );
 
         if (response.status === 401) {
           window.location.href = "/login";
@@ -53,14 +61,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         const data = await response.json();
 
         const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
+          id: data.assistant_message?.id ?? (Date.now() + 1).toString(),
           role: "assistant",
           content: data.msg_reply,
           suggestions: data.suggested_queries || [],
         };
 
         onNewMessage(userMessage, assistantMessage);
-        setValue("");
       } catch (error) {
         console.error("Error sending message:", error);
         const errorMessage: Message = {
@@ -74,7 +81,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }
     };
 
-    // Expose sendMessage to parent via ref so pills can trigger it
     useImperativeHandle(ref, () => ({ sendMessage }));
 
     const handleSubmit = (e: React.FormEvent) => {
