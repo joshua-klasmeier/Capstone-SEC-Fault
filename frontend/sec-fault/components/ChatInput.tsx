@@ -16,12 +16,10 @@ interface ChatInputProps {
   chatId: string | null;
   ensureChat: () => Promise<string>;
   onNewMessage: (userMessage: Message, assistantMessage: Message) => void;
-  loading: boolean;
-  setLoading: (loading: boolean) => void;
 }
 
 export interface ChatInputHandle {
-  sendMessage, loading, setLoading: (text: string) => void;
+  sendMessage: (text: string) => void;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
@@ -30,8 +28,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [loading, setLoading] = useState(false);
 
     const sendMessage = async (text: string) => {
-      if (!text.trim()) return;
-    if (!value.trim() || loading) return;
+      if (!text.trim() || loading) return;
 
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -41,9 +38,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
       setLoading(true);
       setValue("");
-
-    setValue("");
-    setLoading(true);
 
       try {
         // Create conversation if this is the first message
