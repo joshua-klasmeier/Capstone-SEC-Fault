@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 
 import google.genai as genai
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from db.models import Conversation, Message, User
+from ingestion import pipeline
 
 load_dotenv()
 
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+logger = logging.getLogger(__name__)
 
 
 # --------------- helpers ---------------
@@ -52,6 +55,9 @@ class NewChatRequest(BaseModel):
 
 class NewMsgRequest(BaseModel):
     message: str
+    ticker: str | None = None
+    form_type: str | None = None
+    limit: int = Field(default=5, ge=1, le=10)
 
 
 class ConversationOut(BaseModel):
@@ -180,6 +186,36 @@ async def send_message(
     )
     history = result.scalars().all()
 
+    # Retrieve filing chunks from Qdrant.
+    try:
+        retrieved_chunks = await pipeline.query_filings(
+            query=req.message,
+            ticker=req.ticker,
+            form_type=req.form_type,
+            limit=req.limit,
+        )
+    except Exception as exc:
+        logger.warning("RAG retrieval failed: %s", exc)
+        retrieved_chunks = []
+
+    retrieval_context = ""
+    if retrieved_chunks:
+        retrieval_context = "\n\n".join(
+            [
+                (
+                    f"[Source {idx + 1}] "
+                    f"Ticker={chunk.get('ticker', 'N/A')} | "
+                    f"Form={chunk.get('form_type', 'N/A')} | "
+                    f"Accession={chunk.get('accession_number', 'N/A')} | "
+                    f"Section={chunk.get('section', 'N/A')}\n"
+                    f"{chunk.get('text', '')}"
+                )
+                for idx, chunk in enumerate(retrieved_chunks)
+            ]
+        )
+    else:
+        retrieval_context = "No relevant filing excerpts were retrieved."
+
     # Generate Gemini reply
     if not gemini_client:
         reply_text = "Gemini API not configured. This is a placeholder response."
@@ -192,6 +228,9 @@ async def send_message(
             )
             prompt = f"""You are SEC Fault, an AI assistant that helps users understand SEC filings and financial reports.
 
+Retrieved filing excerpts (highest relevance first):
+{retrieval_context}
+
 Here is the conversation so far:
 {history_text}
 User: {req.message}
@@ -202,7 +241,13 @@ You are speaking to a non-finance professional. Your job is to:
 - Explain any major risks the company has disclosed
 - Point out anything unusual or important investors should know
 - Use simple language — avoid heavy financial jargon
-- Be concise but thorough"""
+- Be concise but thorough
+
+Grounding rules:
+- Prioritize facts from the retrieved excerpts.
+- If the excerpts do not support a claim, say that the available filing context is insufficient.
+- Do not fabricate numeric values.
+- End with a short "Sources" section listing accession number and section for claims used."""
 
             response = gemini_client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -241,6 +286,16 @@ You are speaking to a non-finance professional. Your job is to:
             content=assistant_msg.content,
             created_at=assistant_msg.created_at.isoformat(),
         ),
+        "retrieved_chunks": [
+            {
+                "ticker": c.get("ticker"),
+                "form_type": c.get("form_type"),
+                "accession_number": c.get("accession_number"),
+                "section": c.get("section"),
+                "chunk_index": c.get("chunk_index"),
+            }
+            for c in retrieved_chunks
+        ],
         "msg_reply": reply_text,
     }
 
