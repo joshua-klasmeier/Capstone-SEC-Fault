@@ -63,6 +63,7 @@ app.add_middleware(
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET_KEY", "dev-session-secret-change-me"),
+    session_cookie="sec_fault_oauth_session",
     same_site=COOKIE_SAMESITE,
     https_only=COOKIE_SECURE,
 )
