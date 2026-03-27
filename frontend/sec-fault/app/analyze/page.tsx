@@ -32,6 +32,7 @@ export default function AnalyzePage() {
 function AnalyzeContent() {
   const [sideBarOpen, setSideBarOpen] = useState(false);
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const sentPromptRef = useRef<string | null>(null);
   const searchParams = useSearchParams();
 
   const [chatId, setChatId] = useState<string | null>(null);
@@ -63,6 +64,18 @@ function AnalyzeContent() {
       loadChat(chatParam);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // If arriving from home with ?prompt=..., send it once as the first message.
+  useEffect(() => {
+    const promptParam = searchParams.get("prompt")?.trim();
+    const chatParam = searchParams.get("chat");
+    if (!promptParam || chatParam) return;
+
+    if (sentPromptRef.current === promptParam) return;
+    sentPromptRef.current = promptParam;
+
+    chatInputRef.current?.sendMessage(promptParam);
   }, [searchParams]);
 
   // Create a new conversation on the backend, return the id

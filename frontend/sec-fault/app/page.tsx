@@ -13,8 +13,14 @@ export default function Home() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Navigate to analyze page (we can later pass prompt as state/query param)
-    router.push("/analyze");
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      router.push("/analyze");
+      return;
+    }
+
+    const params = new URLSearchParams({ prompt: trimmedPrompt });
+    router.push(`/analyze?${params.toString()}`);
   };
 
   const examplePrompts = [
