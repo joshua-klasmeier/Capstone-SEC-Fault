@@ -253,8 +253,22 @@ Grounding rules:
                 model="gemini-2.5-flash",
                 contents=prompt,
             )
-            reply_text = response.text
+            reply_text = response.text or ""
+            if not reply_text:
+
+                try:
+                    reply_text = "".join(
+                        part.text
+                        for candidate in response.candidates
+                        for part in candidate.content.parts
+                        if hasattr(part, "text") and part.text
+                    )
+                except Exception:
+                    pass
+            if not reply_text:
+                reply_text = "I was unable to generate a response. Please try again."
         except Exception as e:
+            logger.error("Gemini generation error: %s", e)
             reply_text = f"Error generating response: {e}"
 
     # Save assistant message
