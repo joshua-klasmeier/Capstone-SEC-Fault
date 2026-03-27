@@ -45,7 +45,7 @@ export default function ChatMessages({ messages, loading , onSuggestionClick }: 
   }, [messages, loading]);
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="border-b border-border px-6 py-4 bg-surface/50 backdrop-blur-sm">
+      <div className="border-b border-border py-4 pr-6 pl-16 bg-surface/50 backdrop-blur-sm">
         <h1 className="text-lg font-semibold text-text-primary">
           SEC Filing Analysis
         </h1>
