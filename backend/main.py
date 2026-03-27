@@ -1,4 +1,5 @@
 import os
+import logging
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, HTTPException, Response
@@ -17,6 +18,9 @@ from routers.ingestion import router as ingestion_router
 from routers.conversations import router as conversations_router
 
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     await init_db()
@@ -33,7 +37,7 @@ def _parse_origins(raw_origins: str | None) -> list[str]:
 FRONTEND_ORIGINS = _parse_origins(os.getenv("FRONTEND_URL"))
 FRONTEND_URL = FRONTEND_ORIGINS[0]
 GOOGLE_REDIRECT_URI = os.getenv(
-    "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback"
+    "GOOGLE_REDIRECT_URI", f"{FRONTEND_URL}/api/backend/auth/callback"
 )
 
 # When frontend and backend live on different domains (production),
@@ -98,7 +102,14 @@ async def auth_callback(request: Request):
     minimal HttpOnly cookie; future work can persist users and
     enforce auth on API routes.
     """
-    token = await oauth.google.authorize_access_token(request)
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except Exception as exc:
+        # Most common causes are state mismatch/session cookie issues or
+        # redirect URI misconfiguration in Google Cloud OAuth settings.
+        logger.exception("Google OAuth callback failed: %s", exc)
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=oauth_callback_failed")
+
     user_info = token.get("userinfo") or {}
 
     response = RedirectResponse(url=FRONTEND_URL)
