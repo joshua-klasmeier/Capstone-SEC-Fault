@@ -107,8 +107,22 @@ async def auth_callback(request: Request):
     except Exception as exc:
         # Most common causes are state mismatch/session cookie issues or
         # redirect URI misconfiguration in Google Cloud OAuth settings.
-        logger.exception("Google OAuth callback failed: %s", exc)
-        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=oauth_callback_failed")
+        error_text = str(exc).lower()
+        error_code = "oauth_callback_failed"
+        if "mismatching_state" in error_text or "state" in error_text:
+            error_code = "oauth_state_mismatch"
+        elif "invalid_client" in error_text:
+            error_code = "oauth_invalid_client"
+        elif "redirect_uri" in error_text:
+            error_code = "oauth_redirect_uri_mismatch"
+
+        logger.exception(
+            "Google OAuth callback failed (%s). path=%s has_session_cookie=%s",
+            error_code,
+            request.url.path,
+            "session" in request.cookies,
+        )
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error={error_code}")
 
     user_info = token.get("userinfo") or {}
 
