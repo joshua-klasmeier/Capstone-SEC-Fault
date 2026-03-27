@@ -1,5 +1,6 @@
 import os
 import logging
+from urllib.parse import urlencode
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, HTTPException, Response
@@ -126,14 +127,24 @@ async def auth_callback(request: Request):
         elif "timeout" in error_blob or "timed out" in error_blob:
             error_code = "oauth_provider_timeout"
 
+        has_oauth_session_cookie = "sec_fault_oauth_session" in request.cookies
+
         logger.exception(
             "Google OAuth callback failed (%s). type=%s path=%s has_session_cookie=%s",
             error_code,
             exc.__class__.__name__,
             request.url.path,
-            "session" in request.cookies,
+            has_oauth_session_cookie,
         )
-        return RedirectResponse(url=f"{FRONTEND_URL}/login?error={error_code}")
+        params = urlencode(
+            {
+                "error": error_code,
+                "oauth_exc": exc.__class__.__name__,
+                "has_oauth_session": str(has_oauth_session_cookie).lower(),
+                "callback_path": request.url.path,
+            }
+        )
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?{params}")
 
     user_info = token.get("userinfo") or {}
 
@@ -179,6 +190,19 @@ def auth_me(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     return {"user": {"name": name, "email": email}}
+
+
+@app.get("/auth/debug")
+def auth_debug(request: Request):
+    """Return safe auth diagnostics for production troubleshooting."""
+    return {
+        "frontend_url": FRONTEND_URL,
+        "google_redirect_uri": GOOGLE_REDIRECT_URI,
+        "request_url": str(request.url),
+        "has_oauth_session_cookie": "sec_fault_oauth_session" in request.cookies,
+        "has_user_email_cookie": "sec_fault_user_email" in request.cookies,
+        "cookie_names": sorted(list(request.cookies.keys())),
+    }
 
 
 @app.post("/auth/logout")
