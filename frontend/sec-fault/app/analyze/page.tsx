@@ -33,7 +33,7 @@ function AnalyzeContent() {
   const chatInputRef = useRef<ChatInputHandle>(null);
   const sentPromptRef = useRef<string | null>(null);
   const searchParams = useSearchParams();
-
+  const [loading, setLoading] = useState(false);  // ← ADD THIS
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([GREETING]);
   const [conversations, setConversations] = useState<
@@ -55,6 +55,18 @@ function AnalyzeContent() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  // Auto-send initial prompt from example pills
+  useEffect(() => {
+    const initialPrompt = sessionStorage.getItem('initialPrompt');
+    if (initialPrompt) {
+      sessionStorage.removeItem('initialPrompt');
+    
+      setTimeout(() => {
+        chatInputRef.current?.sendMessage(initialPrompt);
+      }, 500);
+    }
+  }, []);
 
   // Load chat from ?chat= query param (e.g. coming from history page)
   useEffect(() => {
@@ -129,6 +141,7 @@ function AnalyzeContent() {
 
   const handleNewMessage = (userMessage: Message, assistantMessage: Message) => {
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setLoading(false);
     loadConversations();
   };
 
@@ -158,7 +171,16 @@ function AnalyzeContent() {
       )}
 
       <main className="flex flex-1 flex-col">
-        <ChatMessages messages={messages} onSuggestionClick={handleSuggestionClick} />
+        <ChatMessages 
+          messages={messages} 
+          loading={loading}
+          onSuggestionClick={handleSuggestionClick} 
+          onRegenerate={(userMessage) => { 
+            if (chatInputRef.current) {
+              handleSuggestionClick(userMessage);
+            } 
+          }} 
+        />
         <ChatInput
           ref={chatInputRef}
           chatId={chatId}

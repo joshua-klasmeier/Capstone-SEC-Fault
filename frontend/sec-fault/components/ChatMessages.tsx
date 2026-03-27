@@ -3,7 +3,8 @@
 import { Copy, ThumbsUp, ThumbsDown, RotateCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import React from "react";
 
 export interface Message {
   id: string;
@@ -15,6 +16,7 @@ export interface Message {
 interface ChatMessagesProps {
   messages: Message[];
   onSuggestionClick: (text: string) => void;
+  onRegenerate?: (userMessage: string) => void;
   loading?: boolean;
 }
 
@@ -35,8 +37,34 @@ function LoadingIndicator() {
   );
 }
 
-export default function ChatMessages({ messages, loading , onSuggestionClick }: ChatMessagesProps) {
+export default function ChatMessages({ messages, loading , onSuggestionClick, onRegenerate }: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [copiedId, setCopiedId] = React.useState<string | null>(null);
+
+  const handleCopy = (content: string, messageId: string) => {
+    navigator.clipboard.writeText(content);
+    setCopiedId(messageId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleThumbsUp = (messageId: string) => {
+    console.log('helpful:', messageId);
+  };
+
+  const handleThumbsDown = (messageId: string) => {
+    console.log('not helpful:', messageId);
+  };
+
+  const handleRegenerate = (messageId: string) => {
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex > 0) {
+      const userMessage = messages[messageIndex - 1];
+      if (userMessage && userMessage.role === 'user' && onRegenerate) {
+        console.log('regenerating response for:', userMessage.content);
+        onRegenerate(userMessage.content);
+      }
+    }
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -132,16 +160,36 @@ export default function ChatMessages({ messages, loading , onSuggestionClick }: 
                 )}
 
                 <div className="flex gap-1">
-                  <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
+                  <button
+                    onClick={() => handleCopy(msg.content, msg.id)}
+                    title={copiedId === msg.id ? "Copied!" : "Copy message"}
+                    className={`rounded-md p-1.5 transition-all ${
+                      copiedId === msg.id 
+                        ? 'bg-accent/20 text-accent' 
+                        : 'text-text-secondary hover:bg-border hover:text-text-primary'
+                    }`}
+                  >
                     <Copy className="h-3.5 w-3.5" />
                   </button>
-                  <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
+                  <button
+                    onClick={() => handleThumbsUp(msg.id)}
+                    title="Like"
+                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-accent"
+                  >
                     <ThumbsUp className="h-3.5 w-3.5" />
                   </button>
-                  <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
+                  <button 
+                    onClick={() => handleThumbsDown(msg.id)}
+                    title="Dislike"
+                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-red-500"
+                  >
                     <ThumbsDown className="h-3.5 w-3.5" />
                   </button>
-                  <button className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
+                  <button
+                    onClick={() => handleRegenerate(msg.id)}
+                    title="Regenerate"
+                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                  >
                     <RotateCw className="h-3.5 w-3.5" />
                   </button>
                 </div>
