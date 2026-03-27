@@ -22,7 +22,16 @@ async def lifespan(app_instance: FastAPI):
     await init_db()
     yield
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+def _parse_origins(raw_origins: str | None) -> list[str]:
+    if not raw_origins:
+        return ["http://localhost:3000"]
+    origins = [origin.strip().rstrip("/") for origin in raw_origins.split(",")]
+    return [origin for origin in origins if origin]
+
+
+FRONTEND_ORIGINS = _parse_origins(os.getenv("FRONTEND_URL"))
+FRONTEND_URL = FRONTEND_ORIGINS[0]
 GOOGLE_REDIRECT_URI = os.getenv(
     "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback"
 )
@@ -30,7 +39,7 @@ GOOGLE_REDIRECT_URI = os.getenv(
 # When frontend and backend live on different domains (production),
 # cookies must use SameSite=None + Secure so the browser sends them
 # on cross-origin fetch requests with credentials: "include".
-IS_PROD = FRONTEND_URL.startswith("https://")
+IS_PROD = any(origin.startswith("https://") for origin in FRONTEND_ORIGINS)
 COOKIE_SAMESITE: str = "none" if IS_PROD else "lax"
 COOKIE_SECURE: bool = IS_PROD
 
@@ -41,7 +50,7 @@ app.include_router(conversations_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=FRONTEND_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,6 +59,8 @@ app.add_middleware(
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET_KEY", "dev-session-secret-change-me"),
+    same_site=COOKIE_SAMESITE,
+    https_only=COOKIE_SECURE,
 )
 
 oauth = OAuth()
@@ -60,6 +71,15 @@ oauth.register(
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={"scope": "openid email profile"},
 )
+
+
+def _cookie_kwargs() -> dict:
+    return {
+        "httponly": True,
+        "secure": COOKIE_SECURE,
+        "samesite": COOKIE_SAMESITE,
+        "path": "/",
+    }
 
 @app.get("/auth/login")
 async def login(request: Request):
@@ -97,18 +117,14 @@ async def auth_callback(request: Request):
         response.set_cookie(
             key="sec_fault_user_name",
             value=display_name,
-            httponly=True,
-            secure=COOKIE_SECURE,
-            samesite=COOKIE_SAMESITE,
+            **_cookie_kwargs(),
         )
 
     if email:
         response.set_cookie(
             key="sec_fault_user_email",
             value=email,
-            httponly=True,
-            secure=COOKIE_SECURE,
-            samesite=COOKIE_SAMESITE,
+            **_cookie_kwargs(),
         )
 
     return response
@@ -137,11 +153,13 @@ def auth_logout(response: Response):
     response = Response(status_code=204)
     response.delete_cookie(
         key="sec_fault_user_name",
+        path="/",
         samesite=COOKIE_SAMESITE,
         secure=COOKIE_SECURE,
     )
     response.delete_cookie(
         key="sec_fault_user_email",
+        path="/",
         samesite=COOKIE_SAMESITE,
         secure=COOKIE_SECURE,
     )
