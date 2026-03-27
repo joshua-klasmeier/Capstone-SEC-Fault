@@ -3,12 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { FileText } from "lucide-react";
-
-// Backend API base URL.
-// In development, this defaults to localhost:8000, but can be
-// overridden via NEXT_PUBLIC_API_URL for deployed environments.
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiUrl } from "@/lib/api";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -19,7 +14,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      window.location.href = `${API_URL}/auth/login`;
+      window.location.href = apiUrl("/auth/login");
     } catch (err) {
       setError("Unable to start Google sign-in. Please try again.");
       setLoading(false);

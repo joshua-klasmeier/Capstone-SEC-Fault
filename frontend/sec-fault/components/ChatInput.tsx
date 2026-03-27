@@ -2,8 +2,7 @@
 
 import { useState, forwardRef, useImperativeHandle } from "react";
 import { ArrowUp, Loader2 } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiUrl } from "@/lib/api";
 
 export interface Message {
   id: string;
@@ -44,7 +43,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         const activeId = chatId ?? (await ensureChat());
 
         const response = await fetch(
-          `${API_URL}/chats/${activeId}/messages`,
+          apiUrl(`/chats/${activeId}/messages`),
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

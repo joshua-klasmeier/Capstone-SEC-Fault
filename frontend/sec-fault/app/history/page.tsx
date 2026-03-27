@@ -1,11 +1,10 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
+import { apiUrl } from "@/lib/api";
 import { ChevronRight, MessageSquare, FileText, Menu } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type ConversationItem = {
   id: string;
@@ -21,7 +20,7 @@ export default function HistoryPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API_URL}/chats`, {
+        const res = await fetch(apiUrl("/chats"), {
           credentials: "include",
         });
         if (res.ok) {

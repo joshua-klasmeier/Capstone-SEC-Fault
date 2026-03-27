@@ -1,12 +1,10 @@
 "use client";
 
+import { apiUrl } from "@/lib/api";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Home, FileText, History, Plus, Menu, MessageSquare } from "lucide-react";
-
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type SidebarUser = {
   name: string | null;
@@ -42,7 +40,7 @@ export default function Sidebar({
   useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await fetch(`${API_URL}/auth/me`, {
+        const res = await fetch(apiUrl("/auth/me"), {
           credentials: "include",
           cache: "no-store",
         });
@@ -120,7 +118,7 @@ export default function Sidebar({
 
   async function handleLogout() {
     try {
-      await fetch(`${API_URL}/auth/logout`, {
+      await fetch(apiUrl("/auth/logout"), {
         method: "POST",
         credentials: "include",
       });

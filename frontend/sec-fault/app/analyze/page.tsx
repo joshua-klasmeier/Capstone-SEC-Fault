@@ -3,11 +3,10 @@
 import Sidebar from "@/components/Sidebar";
 import ChatMessages, { Message } from "@/components/ChatMessages";
 import ChatInput, { ChatInputHandle } from "@/components/ChatInput";
+import { apiUrl } from "@/lib/api";
 import { Suspense, useState, useRef, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const GREETING: Message = {
   id: "greeting",
@@ -44,7 +43,7 @@ function AnalyzeContent() {
   // Fetch user's conversation list
   const loadConversations = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/chats`, { credentials: "include" });
+      const res = await fetch(apiUrl("/chats"), { credentials: "include" });
       if (res.ok) {
         setConversations(await res.json());
       }
@@ -82,7 +81,7 @@ function AnalyzeContent() {
   const ensureChat = async (): Promise<string> => {
     if (chatId) return chatId;
 
-    const res = await fetch(`${API_URL}/chats`, {
+    const res = await fetch(apiUrl("/chats"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -103,7 +102,7 @@ function AnalyzeContent() {
   // Load an existing conversation
   const loadChat = async (id: string) => {
     try {
-      const res = await fetch(`${API_URL}/chats/${id}`, {
+      const res = await fetch(apiUrl(`/chats/${id}`), {
         credentials: "include",
       });
       if (!res.ok) return;
