@@ -36,6 +36,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const [user, setUser] = useState<SidebarUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -43,8 +44,10 @@ export default function Sidebar({
       try {
         const res = await fetch(`${API_URL}/auth/me`, {
           credentials: "include",
+          cache: "no-store",
         });
         if (!res.ok) {
+          setUser(null);
           return;
         }
         const data = await res.json();
@@ -53,14 +56,38 @@ export default function Sidebar({
             name: data.user.name ?? null,
             email: data.user.email ?? null,
           });
+        } else {
+          setUser(null);
         }
       } catch {
         // Ignore auth errors in sidebar.
+        setUser(null);
+      } finally {
+        setAuthLoading(false);
       }
     }
 
     fetchUser();
-  }, []);
+
+    // Refresh auth state when tab regains focus after OAuth redirects.
+    const handleFocus = () => {
+      fetchUser();
+    };
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchUser();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [pathname]);
 
   const navItems = [
     {
@@ -228,7 +255,11 @@ export default function Sidebar({
 
       {/* User Profile / Login */}
       <div className="border-t border-border px-4 py-3">
-        {user ? (
+        {authLoading ? (
+          <div className="flex w-full items-center justify-center rounded-lg bg-surface px-4 py-2 text-sm font-medium text-text-secondary">
+            Checking sign-in...
+          </div>
+        ) : user ? (
           <div className="relative">
             <button
               type="button"
