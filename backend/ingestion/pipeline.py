@@ -116,7 +116,12 @@ async def ingest_filing(
         )
 
     # Step 9 — Save chunks to Qdrant
-    save_chunks_to_qdrant(chunks, embeddings)
+    try:
+        save_chunks_to_qdrant(chunks, embeddings)
+        qdrant_status = "success"
+    except Exception as exc:
+        logger.error("Failed to save chunks to Qdrant: %s", exc)
+        qdrant_status = "failed"
 
     # Step 10 — Return success
     return {
@@ -127,6 +132,7 @@ async def ingest_filing(
         "filed_date": filing["filed_date"],
         "sections_found": list(sections.keys()),
         "chunks_stored": len(chunks),
+        "qdrant_indexed": qdrant_status == "success",
     }
 
 
@@ -140,13 +146,17 @@ async def query_filings(
     if not query:
         raise ValueError("query must not be empty")
 
-    embedding = embed_query(query)
-    return search_similar_chunks(
-        query_embedding=embedding,
-        ticker=ticker,
-        form_type=form_type,
-        limit=limit,
-    )
+    try:
+        embedding = embed_query(query)
+        return search_similar_chunks(
+            query_embedding=embedding,
+            ticker=ticker,
+            form_type=form_type,
+            limit=limit,
+        )
+    except Exception as exc:
+        logger.error("Failed to query Qdrant: %s", exc)
+        raise ValueError("Vector database is currently unavailable. Please try again later.")
 
 
 async def get_ticker_filings(
