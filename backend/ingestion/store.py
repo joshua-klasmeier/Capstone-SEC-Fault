@@ -126,13 +126,13 @@ def search_similar_chunks(
         models.Filter(must=must_conditions) if must_conditions else None
     )
 
-    result = client.query_points(
+    result = client.search(
         collection_name=collection_name,
-        query=query_embedding,
+        query_vector=query_embedding,
         query_filter=query_filter,
         limit=limit,
     )
-    return [point.payload for point in result.points]
+    return [point.payload for point in result]
 
 
 async def get_filings_for_ticker(
