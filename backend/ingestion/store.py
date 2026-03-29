@@ -19,6 +19,18 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 _VECTOR_SIZE = 3072
 
 
+def _ensure_qdrant_payload_indexes(
+    client: QdrantClient, collection_name: str
+) -> None:
+    """Ensure payload indexes exist for fields used in query filters."""
+    for field_name in ("ticker", "form_type"):
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name=field_name,
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
+
+
 def get_qdrant_client() -> QdrantClient:
     """Create and return a QdrantClient."""
     kwargs = {"url": QDRANT_URL}
@@ -28,7 +40,7 @@ def get_qdrant_client() -> QdrantClient:
 
 
 def ensure_qdrant_collection(collection_name: str = "sec_filings") -> None:
-    """Create the Qdrant collection if it does not already exist."""
+    """Create the Qdrant collection and filter indexes if needed."""
     client = get_qdrant_client()
     if not client.collection_exists(collection_name):
         client.create_collection(
@@ -38,6 +50,7 @@ def ensure_qdrant_collection(collection_name: str = "sec_filings") -> None:
                 distance=Distance.COSINE,
             ),
         )
+    _ensure_qdrant_payload_indexes(client, collection_name)
 
 
 async def save_filing_to_postgres(
@@ -106,6 +119,7 @@ def search_similar_chunks(
     collection_name: str = "sec_filings",
 ) -> list[dict]:
     """Search Qdrant for chunks similar to query_embedding."""
+    ensure_qdrant_collection(collection_name)
     client = get_qdrant_client()
 
     must_conditions = []
