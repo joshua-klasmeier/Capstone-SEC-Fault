@@ -148,6 +148,11 @@ async def query_filings(
 
     try:
         embedding = embed_query(query)
+    except Exception as exc:
+        logger.error("Failed to generate query embedding: %s", exc)
+        raise ValueError(f"Embedding service unavailable: {str(exc)[:100]}")
+
+    try:
         return search_similar_chunks(
             query_embedding=embedding,
             ticker=ticker,
@@ -155,8 +160,8 @@ async def query_filings(
             limit=limit,
         )
     except Exception as exc:
-        logger.error("Failed to query Qdrant: %s", exc)
-        raise ValueError("Vector database is currently unavailable. Please try again later.")
+        logger.error("Failed to search Qdrant: %s", exc)
+        raise ValueError(f"Vector database unavailable: {str(exc)[:100]}")
 
 
 async def get_ticker_filings(
