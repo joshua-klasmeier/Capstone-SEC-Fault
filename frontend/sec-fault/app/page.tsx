@@ -23,6 +23,11 @@ export default function Home() {
     router.push(`/analyze?${params.toString()}`);
   };
 
+  const handleRecPillClick = (example: string) => {
+    sessionStorage.setItem('initialPrompt', example);
+    router.push("/analyze");
+  };
+
   const examplePrompts = [
     "Summarize Apple's latest 10-K filing",
     "What are Tesla's revenue trends from their Q3 report?",
@@ -85,7 +90,7 @@ export default function Home() {
                 {examplePrompts.map((example, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setPrompt(example)}
+                    onClick={() => handleRecPillClick(example)}
                     className="rounded-full border border-border bg-surface px-4 py-2 text-sm text-text-primary transition-colors hover:border-accent hover:bg-accent hover:bg-opacity-5"
                   >
                     {example}
