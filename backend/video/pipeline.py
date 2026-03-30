@@ -215,7 +215,7 @@ def _classify_emotion(sentence: str) -> str:
     return "neutral"
 
 
-def _concat_video_segments(segment_paths: list[Path], output_mp4: Path) -> None:
+async def _concat_video_segments(segment_paths: list[Path], output_mp4: Path) -> None:
     if not segment_paths:
         raise VideoPipelineError("No video segments were generated to concatenate.")
 
@@ -244,13 +244,18 @@ def _concat_video_segments(segment_paths: list[Path], output_mp4: Path) -> None:
         "+faststart",
         str(output_mp4),
     ]
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    if result.returncode != 0:
-        stderr_tail = "\n".join(result.stderr.splitlines()[-20:])
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr_bytes = await proc.communicate()
+    if proc.returncode != 0:
+        stderr_tail = "\n".join(stderr_bytes.decode(errors="replace").splitlines()[-20:])
         raise VideoPipelineError(f"ffmpeg concat failed:\n{stderr_tail}")
 
 
-def _build_video(
+async def _build_video(
     audio_path: Path,
     output_mp4: Path,
     background_image_path: Path | None,
@@ -322,19 +327,26 @@ def _build_video(
         str(output_mp4),
     ]
 
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    if result.returncode != 0:
-        stderr_tail = "\n".join(result.stderr.splitlines()[-20:])
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr_bytes = await proc.communicate()
+    if proc.returncode != 0:
+        stderr_tail = "\n".join(stderr_bytes.decode(errors="replace").splitlines()[-20:])
         raise VideoPipelineError(f"ffmpeg failed:\n{stderr_tail}")
 
 
-def _trim_audio_edges(audio_path: Path, output_wav: Path) -> Path:
+async def _trim_audio_edges(audio_path: Path, output_wav: Path) -> Path:
     if shutil.which("ffmpeg") is None:
         return audio_path
 
     cmd = [
         "ffmpeg",
         "-y",
+        "-threads",
+        "1",
         "-i",
         str(audio_path),
         "-af",
@@ -350,8 +362,13 @@ def _trim_audio_edges(audio_path: Path, output_wav: Path) -> Path:
         "1",
         str(output_wav),
     ]
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    if result.returncode != 0 or not output_wav.exists() or output_wav.stat().st_size == 0:
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await proc.communicate()
+    if proc.returncode != 0 or not output_wav.exists() or output_wav.stat().st_size == 0:
         return audio_path
     return output_wav
 
@@ -398,8 +415,8 @@ async def _generate_video_artifacts(
             tts_provider=tts_provider,
             tts_voice=tts_voice,
         )
-        await asyncio.to_thread(_build_video, audio_path, mp4_path, bg_path, avatar_path)
-        duration_seconds = await asyncio.to_thread(_probe_duration_seconds, audio_path)
+        await _build_video(audio_path, mp4_path, bg_path, avatar_path)
+        duration_seconds = _probe_duration_seconds(audio_path)
 
         return {
             "script_text": clean_script,
@@ -444,21 +461,19 @@ async def _generate_video_artifacts(
             tts_provider=tts_provider,
             tts_voice=tts_voice,
         )
-        trimmed_segment_audio = await asyncio.to_thread(
-            _trim_audio_edges,
+        trimmed_segment_audio = await _trim_audio_edges(
             raw_segment_audio,
             output_dir / f"{segment_stem}-trim.wav",
         )
         segment_video = output_dir / f"{segment_stem}.mp4"
-        await asyncio.to_thread(
-            _build_video,
+        await _build_video(
             trimmed_segment_audio,
             segment_video,
             bg_path,
             emotion_avatar_map.get(emotion, neutral_avatar_path),
         )
 
-        segment_duration = await asyncio.to_thread(_probe_duration_seconds, trimmed_segment_audio)
+        segment_duration = _probe_duration_seconds(trimmed_segment_audio)
         if segment_duration:
             segment_durations.append(segment_duration)
         segment_paths.append(segment_video)
@@ -473,7 +488,7 @@ async def _generate_video_artifacts(
             }
         )
 
-    await asyncio.to_thread(_concat_video_segments, segment_paths, mp4_path)
+    await _concat_video_segments(segment_paths, mp4_path)
 
     return {
         "script_text": clean_script,
