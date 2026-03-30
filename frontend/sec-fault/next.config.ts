@@ -8,9 +8,6 @@ const backendUrl =
 const normalizedBackendUrl = backendUrl.replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    root: __dirname,
-  },
   async rewrites() {
     return [
       {

@@ -15,7 +15,6 @@ lxml
 qdrant-client
 redis
 sec-edgar-downloader
-TTS; python_version < "3.12"
 edge-tts
 pytest
 pytest-asyncio==1.0.0
