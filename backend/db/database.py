@@ -1,5 +1,6 @@
 import os
 import ssl
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -9,11 +10,19 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# asyncpg doesn't understand query params like sslmode; strip them all and pass ssl via connect_args
+# asyncpg doesn't understand query params like sslmode; strip query params and
+# translate sslmode into asyncpg connect_args when explicitly provided.
 if DATABASE_URL:
-    clean_url = DATABASE_URL.split("?")[0]
-    ssl_ctx = ssl.create_default_context()
-    engine = create_async_engine(clean_url, echo=True, connect_args={"ssl": ssl_ctx})
+    parsed = urlsplit(DATABASE_URL)
+    query = parse_qs(parsed.query)
+    sslmode = (query.get("sslmode", [""])[0] or "").lower()
+
+    clean_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+    connect_args = {}
+    if sslmode and sslmode != "disable":
+        connect_args["ssl"] = ssl.create_default_context()
+
+    engine = create_async_engine(clean_url, echo=True, connect_args=connect_args)
 else:
     engine = None
 
