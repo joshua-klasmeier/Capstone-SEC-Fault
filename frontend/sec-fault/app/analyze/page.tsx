@@ -205,18 +205,41 @@ function AnalyzeContent() {
         tts_voice: "en-US-GuyNeural",
       };
 
-      const res = await fetch(apiUrl("/video/generate"), {
+      // 1. Submit the job
+      const submitRes = await fetch(apiUrl("/video/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const text = await res.text();
+      if (!submitRes.ok) {
+        const text = await submitRes.text();
         throw new Error(text || "Video generation failed");
       }
+      const { job_id } = await submitRes.json();
 
-      const blob = await res.blob();
+      // 2. Poll until complete
+      let status = "processing";
+      while (status === "processing") {
+        await new Promise((r) => setTimeout(r, 2000));
+        const pollRes = await fetch(apiUrl(`/video/jobs/${job_id}`), {
+          credentials: "include",
+        });
+        if (!pollRes.ok) throw new Error("Failed to check video status");
+        const pollData = await pollRes.json();
+        status = pollData.status;
+        if (status === "failed") {
+          throw new Error(pollData.error || "Video generation failed");
+        }
+      }
+
+      // 3. Download the finished video
+      const dlRes = await fetch(apiUrl(`/video/jobs/${job_id}/download`), {
+        credentials: "include",
+      });
+      if (!dlRes.ok) throw new Error("Failed to download video");
+
+      const blob = await dlRes.blob();
       if (!blob.size) {
         throw new Error("Received empty video response");
       }
