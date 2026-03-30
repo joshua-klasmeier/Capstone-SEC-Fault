@@ -29,6 +29,9 @@ DEFAULT_BG_COLOR = os.getenv("VIDEO_DEFAULT_BG_COLOR", "0x0f172a")
 DEFAULT_TTS_MODEL = os.getenv("VIDEO_TTS_MODEL", "tts_models/en/ljspeech/tacotron2-DDC")
 DEFAULT_TTS_PROVIDER = os.getenv("VIDEO_TTS_PROVIDER", "auto")
 DEFAULT_EDGE_TTS_VOICE = os.getenv("VIDEO_EDGE_TTS_VOICE", "en-US-GuyNeural")
+DEFAULT_NEUTRAL_AVATAR = "neutral_peter_avatar.png"
+DEFAULT_POSITIVE_AVATAR = "positive_peter_avatar.png"
+DEFAULT_CONCERNED_AVATAR = "concerned_peter_avatar.png"
 
 
 def _sanitize_output_stem(output_name: str | None) -> str:
@@ -65,6 +68,13 @@ def _resolve_existing_path(path_value: str | None) -> Path | None:
         ) from exc
 
     return candidate
+
+
+def _resolve_existing_path_if_present(path_value: str | None) -> Path | None:
+    try:
+        return _resolve_existing_path(path_value)
+    except VideoPipelineError:
+        return None
 
 
 def _synthesize_speech_coqui(text: str, output_wav: Path, tts_model_name: str) -> Path:
@@ -166,6 +176,84 @@ def _probe_duration_seconds(audio_path: Path) -> float | None:
         return None
 
 
+def _split_script_into_sentences(text: str) -> list[str]:
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    return sentences or [text.strip()]
+
+
+def _classify_emotion(sentence: str) -> str:
+    lower = sentence.lower()
+    positive_terms = {
+        "strong",
+        "growth",
+        "improved",
+        "increase",
+        "record",
+        "opportunity",
+        "gain",
+        "positive",
+        "confident",
+    }
+    concern_terms = {
+        "risk",
+        "decline",
+        "decrease",
+        "loss",
+        "uncertain",
+        "concern",
+        "challenge",
+        "pressure",
+        "warning",
+        "debt",
+        "weak",
+    }
+
+    if any(term in lower for term in concern_terms):
+        return "concerned"
+    if any(term in lower for term in positive_terms):
+        return "positive"
+    return "neutral"
+
+
+def _concat_video_segments(segment_paths: list[Path], output_mp4: Path) -> None:
+    if not segment_paths:
+        raise VideoPipelineError("No video segments were generated to concatenate.")
+
+    if len(segment_paths) == 1:
+        shutil.copyfile(segment_paths[0], output_mp4)
+        return
+
+    concat_list = output_mp4.with_suffix(".txt")
+    lines = [f"file '{path.as_posix()}'" for path in segment_paths]
+    concat_list.write_text("\n".join(lines), encoding="utf-8")
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_list),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        str(output_mp4),
+    ]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr_tail = "\n".join(result.stderr.splitlines()[-20:])
+        raise VideoPipelineError(f"ffmpeg concat failed:\n{stderr_tail}")
+
+
 def _build_video(
     audio_path: Path,
     output_mp4: Path,
@@ -200,7 +288,7 @@ def _build_video(
             "[0:v]scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2,"
             "pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
             "[1:v]scale=360:-2,setsar=1[avatar];"
-            "[bg][avatar]overlay=W-w-40:H-h-40[vout]"
+            "[bg][avatar]overlay=40:(H-h)/2[vout]"
         )
         cmd += ["-filter_complex", filter_complex, "-map", "[vout]"]
     else:
@@ -238,12 +326,44 @@ def _build_video(
         raise VideoPipelineError(f"ffmpeg failed:\n{stderr_tail}")
 
 
+def _trim_audio_edges(audio_path: Path, output_wav: Path) -> Path:
+    if shutil.which("ffmpeg") is None:
+        return audio_path
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(audio_path),
+        "-af",
+        (
+            "silenceremove=start_periods=1:start_silence=0:start_threshold=-45dB,"
+            "areverse,"
+            "silenceremove=start_periods=1:start_silence=0:start_threshold=-45dB,"
+            "areverse"
+        ),
+        "-ar",
+        "24000",
+        "-ac",
+        "1",
+        str(output_wav),
+    ]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0 or not output_wav.exists() or output_wav.stat().st_size == 0:
+        return audio_path
+    return output_wav
+
+
 async def _generate_video_artifacts(
     output_dir: Path,
     output_name: str | None,
     script_text: str,
     background_image_path: str | None,
     avatar_image_path: str | None,
+    enable_dynamic_avatar: bool,
+    neutral_avatar_image_path: str | None,
+    positive_avatar_image_path: str | None,
+    concerned_avatar_image_path: str | None,
     tts_model_name: str,
     tts_provider: str,
     tts_voice: str,
@@ -254,27 +374,113 @@ async def _generate_video_artifacts(
 
     bg_path = _resolve_existing_path(background_image_path)
     avatar_path = _resolve_existing_path(avatar_image_path)
+    neutral_avatar_path = _resolve_existing_path_if_present(
+        neutral_avatar_image_path or str(ASSET_ALLOWLIST_DIR / DEFAULT_NEUTRAL_AVATAR)
+    )
+    positive_avatar_path = _resolve_existing_path_if_present(
+        positive_avatar_image_path or str(ASSET_ALLOWLIST_DIR / DEFAULT_POSITIVE_AVATAR)
+    )
+    concerned_avatar_path = _resolve_existing_path_if_present(
+        concerned_avatar_image_path or str(ASSET_ALLOWLIST_DIR / DEFAULT_CONCERNED_AVATAR)
+    )
 
     clean_script = script_text.strip()
     if not clean_script:
         raise VideoPipelineError("script_text must not be empty")
 
-    audio_path = await _synthesize_speech(
-        text=clean_script,
-        output_stem=output_dir / stem,
-        tts_model_name=tts_model_name,
-        tts_provider=tts_provider,
-        tts_voice=tts_voice,
-    )
-    await asyncio.to_thread(_build_video, audio_path, mp4_path, bg_path, avatar_path)
-    duration_seconds = await asyncio.to_thread(_probe_duration_seconds, audio_path)
+    if not enable_dynamic_avatar:
+        audio_path = await _synthesize_speech(
+            text=clean_script,
+            output_stem=output_dir / stem,
+            tts_model_name=tts_model_name,
+            tts_provider=tts_provider,
+            tts_voice=tts_voice,
+        )
+        await asyncio.to_thread(_build_video, audio_path, mp4_path, bg_path, avatar_path)
+        duration_seconds = await asyncio.to_thread(_probe_duration_seconds, audio_path)
+
+        return {
+            "script_text": clean_script,
+            "script_source": "conversation",
+            "audio_file": str(audio_path),
+            "video_file": str(mp4_path),
+            "duration_seconds": duration_seconds,
+            "segments": [],
+        }
+
+    if not neutral_avatar_path:
+        neutral_avatar_path = avatar_path
+    if not positive_avatar_path:
+        positive_avatar_path = neutral_avatar_path
+    if not concerned_avatar_path:
+        concerned_avatar_path = neutral_avatar_path
+
+    if not neutral_avatar_path:
+        raise VideoPipelineError(
+            "Dynamic avatar mode requires at least one avatar image path."
+        )
+
+    emotion_avatar_map: dict[str, Path] = {
+        "neutral": neutral_avatar_path,
+        "positive": positive_avatar_path or neutral_avatar_path,
+        "concerned": concerned_avatar_path or neutral_avatar_path,
+    }
+
+    sentences = _split_script_into_sentences(clean_script)
+    segment_paths: list[Path] = []
+    segment_durations: list[float] = []
+    segment_info: list[dict] = []
+    audio_files: list[str] = []
+
+    for idx, sentence in enumerate(sentences, start=1):
+        emotion = _classify_emotion(sentence)
+        segment_stem = f"{stem}-seg-{idx:02d}"
+        raw_segment_audio = await _synthesize_speech(
+            text=sentence,
+            output_stem=output_dir / segment_stem,
+            tts_model_name=tts_model_name,
+            tts_provider=tts_provider,
+            tts_voice=tts_voice,
+        )
+        trimmed_segment_audio = await asyncio.to_thread(
+            _trim_audio_edges,
+            raw_segment_audio,
+            output_dir / f"{segment_stem}-trim.wav",
+        )
+        segment_video = output_dir / f"{segment_stem}.mp4"
+        await asyncio.to_thread(
+            _build_video,
+            trimmed_segment_audio,
+            segment_video,
+            bg_path,
+            emotion_avatar_map.get(emotion, neutral_avatar_path),
+        )
+
+        segment_duration = await asyncio.to_thread(_probe_duration_seconds, trimmed_segment_audio)
+        if segment_duration:
+            segment_durations.append(segment_duration)
+        segment_paths.append(segment_video)
+        audio_files.append(str(trimmed_segment_audio))
+        segment_info.append(
+            {
+                "index": idx,
+                "text": sentence,
+                "emotion": emotion,
+                "avatar_file": str(emotion_avatar_map.get(emotion, neutral_avatar_path)),
+                "duration_seconds": segment_duration,
+            }
+        )
+
+    await asyncio.to_thread(_concat_video_segments, segment_paths, mp4_path)
 
     return {
         "script_text": clean_script,
         "script_source": "conversation",
-        "audio_file": str(audio_path),
+        "audio_file": audio_files[0] if audio_files else "",
+        "audio_files": audio_files,
         "video_file": str(mp4_path),
-        "duration_seconds": duration_seconds,
+        "duration_seconds": round(sum(segment_durations), 3) if segment_durations else None,
+        "segments": segment_info,
     }
 
 
@@ -282,6 +488,10 @@ async def run_video_generation_pipeline_inline(
     script_text: str,
     background_image_path: str | None,
     avatar_image_path: str | None,
+    enable_dynamic_avatar: bool,
+    neutral_avatar_image_path: str | None,
+    positive_avatar_image_path: str | None,
+    concerned_avatar_image_path: str | None,
     output_name: str | None,
     tts_model_name: str,
     tts_provider: str,
@@ -294,6 +504,10 @@ async def run_video_generation_pipeline_inline(
         script_text=script_text,
         background_image_path=background_image_path,
         avatar_image_path=avatar_image_path,
+        enable_dynamic_avatar=enable_dynamic_avatar,
+        neutral_avatar_image_path=neutral_avatar_image_path,
+        positive_avatar_image_path=positive_avatar_image_path,
+        concerned_avatar_image_path=concerned_avatar_image_path,
         tts_model_name=tts_model_name,
         tts_provider=tts_provider,
         tts_voice=tts_voice,

@@ -45,8 +45,9 @@ function AnalyzeContent() {
     "backend/public/Sec_file_static_image.png"
   );
   const [avatarImagePath, setAvatarImagePath] = useState(
-    "backend/public/Peter_Griffin_Avatar.png"
+    "backend/public/neutral_peter_avatar.png"
   );
+  const [enableDynamicAvatar, setEnableDynamicAvatar] = useState(true);
   const [videoPanelOpen, setVideoPanelOpen] = useState(false);
   const [videoSourceMessageId, setVideoSourceMessageId] = useState<string | null>(null);
   const [videoScriptOverride, setVideoScriptOverride] = useState("");
@@ -199,6 +200,7 @@ function AnalyzeContent() {
         script_text: videoScriptOverride.trim() || null,
         background_image_path: backgroundImagePath.trim() || null,
         avatar_image_path: avatarImagePath.trim() || null,
+        enable_dynamic_avatar: enableDynamicAvatar,
         tts_provider: "edge",
         tts_voice: "en-US-GuyNeural",
       };
@@ -311,8 +313,17 @@ function AnalyzeContent() {
                   value={avatarImagePath}
                   onChange={(e) => setAvatarImagePath(e.target.value)}
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs text-text-primary outline-none"
-                  placeholder="Avatar image path (example: backend/public/Peter_Griffin_Avatar.png)"
+                  placeholder="Static avatar path fallback (example: backend/public/neutral_peter_avatar.png)"
                 />
+                <label className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs text-text-primary">
+                  <input
+                    type="checkbox"
+                    checked={enableDynamicAvatar}
+                    onChange={(e) => setEnableDynamicAvatar(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  Enable dynamic expressions (neutral/positive/concerned)
+                </label>
               </div>
 
               <div className="mt-3 flex items-center gap-3">

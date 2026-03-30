@@ -21,6 +21,10 @@ class VideoGenerateRequest(BaseModel):
     # Media settings
     background_image_path: str | None = None
     avatar_image_path: str | None = None
+    enable_dynamic_avatar: bool = False
+    neutral_avatar_image_path: str | None = None
+    positive_avatar_image_path: str | None = None
+    concerned_avatar_image_path: str | None = None
     output_name: str | None = None
 
     # Coqui TTS settings
@@ -47,6 +51,10 @@ async def generate_video(req: VideoGenerateRequest):
             script_text=script_text,
             background_image_path=req.background_image_path,
             avatar_image_path=req.avatar_image_path,
+            enable_dynamic_avatar=req.enable_dynamic_avatar,
+            neutral_avatar_image_path=req.neutral_avatar_image_path,
+            positive_avatar_image_path=req.positive_avatar_image_path,
+            concerned_avatar_image_path=req.concerned_avatar_image_path,
             output_name=req.output_name,
             tts_model_name=req.tts_model_name,
             tts_provider=req.tts_provider,
