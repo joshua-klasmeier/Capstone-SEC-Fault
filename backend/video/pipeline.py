@@ -266,13 +266,13 @@ def _build_video(
     cmd: list[str] = ["ffmpeg", "-y"]
 
     if background_image_path:
-        cmd += ["-loop", "1", "-i", str(background_image_path)]
+        cmd += ["-loop", "1", "-framerate", "15", "-i", str(background_image_path)]
     else:
         cmd += [
             "-f",
             "lavfi",
             "-i",
-            f"color=c={DEFAULT_BG_COLOR}:s=1280x720:r=30",
+            f"color=c={DEFAULT_BG_COLOR}:s=854x480:r=15",
         ]
 
     has_avatar = avatar_image_path is not None
@@ -285,18 +285,18 @@ def _build_video(
 
     if has_avatar:
         filter_complex = (
-            "[0:v]scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2,"
-            "pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
-            "[1:v]scale=360:-2,setsar=1[avatar];"
+            "[0:v]scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+            "pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
+            "[1:v]scale=240:-2,setsar=1[avatar];"
             "[bg][avatar]overlay=40:(H-h)/2[vout]"
         )
         cmd += ["-filter_complex", filter_complex, "-map", "[vout]"]
     else:
         filter_complex = (
-            "[0:v]scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2,"
-            "pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
+            "[0:v]scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+            "pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
             "[1:a]aformat=channel_layouts=mono,"
-            "showwaves=s=1180x180:mode=line:colors=0x38bdf8[waves];"
+            "showwaves=s=754x120:mode=line:colors=0x38bdf8[waves];"
             "[bg][waves]overlay=(W-w)/2:H-h-32[vout]"
         )
         cmd += ["-filter_complex", filter_complex, "-map", "[vout]"]
@@ -306,6 +306,10 @@ def _build_video(
         f"{audio_input_index}:a:0",
         "-c:v",
         "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "28",
         "-pix_fmt",
         "yuv420p",
         "-tune",
@@ -313,7 +317,7 @@ def _build_video(
         "-c:a",
         "aac",
         "-b:a",
-        "192k",
+        "128k",
         "-movflags",
         "+faststart",
         "-shortest",
