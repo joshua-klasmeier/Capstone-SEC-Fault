@@ -230,20 +230,16 @@ def _concat_video_segments(segment_paths: list[Path], output_mp4: Path) -> None:
     cmd = [
         "ffmpeg",
         "-y",
+        "-threads",
+        "1",
         "-f",
         "concat",
         "-safe",
         "0",
         "-i",
         str(concat_list),
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
+        "-c",
+        "copy",
         "-movflags",
         "+faststart",
         str(output_mp4),
@@ -263,16 +259,16 @@ def _build_video(
     if shutil.which("ffmpeg") is None:
         raise VideoPipelineError("ffmpeg is not installed or not available in PATH.")
 
-    cmd: list[str] = ["ffmpeg", "-y"]
+    cmd: list[str] = ["ffmpeg", "-y", "-threads", "1"]
 
     if background_image_path:
-        cmd += ["-loop", "1", "-framerate", "15", "-i", str(background_image_path)]
+        cmd += ["-loop", "1", "-framerate", "10", "-i", str(background_image_path)]
     else:
         cmd += [
             "-f",
             "lavfi",
             "-i",
-            f"color=c={DEFAULT_BG_COLOR}:s=854x480:r=15",
+            f"color=c={DEFAULT_BG_COLOR}:s=426x240:r=10",
         ]
 
     has_avatar = avatar_image_path is not None
@@ -285,19 +281,19 @@ def _build_video(
 
     if has_avatar:
         filter_complex = (
-            "[0:v]scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,"
-            "pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
-            "[1:v]scale=240:-2,setsar=1[avatar];"
-            "[bg][avatar]overlay=40:(H-h)/2[vout]"
+            "[0:v]scale=426:240:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+            "pad=426:240:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
+            "[1:v]scale=120:-2,setsar=1[avatar];"
+            "[bg][avatar]overlay=20:(H-h)/2[vout]"
         )
         cmd += ["-filter_complex", filter_complex, "-map", "[vout]"]
     else:
         filter_complex = (
-            "[0:v]scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,"
-            "pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
+            "[0:v]scale=426:240:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+            "pad=426:240:(ow-iw)/2:(oh-ih)/2,setsar=1[bg];"
             "[1:a]aformat=channel_layouts=mono,"
-            "showwaves=s=754x120:mode=line:colors=0x38bdf8[waves];"
-            "[bg][waves]overlay=(W-w)/2:H-h-32[vout]"
+            "showwaves=s=380x60:mode=line:colors=0x38bdf8[waves];"
+            "[bg][waves]overlay=(W-w)/2:H-h-16[vout]"
         )
         cmd += ["-filter_complex", filter_complex, "-map", "[vout]"]
 
@@ -309,15 +305,17 @@ def _build_video(
         "-preset",
         "ultrafast",
         "-crf",
-        "28",
+        "35",
         "-pix_fmt",
         "yuv420p",
         "-tune",
         "stillimage",
+        "-threads",
+        "1",
         "-c:a",
         "aac",
         "-b:a",
-        "128k",
+        "64k",
         "-movflags",
         "+faststart",
         "-shortest",
