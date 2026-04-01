@@ -17,6 +17,7 @@ load_dotenv()
 from db.database import init_db
 from routers.ingestion import router as ingestion_router
 from routers.conversations import router as conversations_router
+from routers.video import router as video_router
 
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ app = FastAPI(
 
 app.include_router(ingestion_router)
 app.include_router(conversations_router)
+app.include_router(video_router)
 
 app.add_middleware(
     CORSMiddleware,

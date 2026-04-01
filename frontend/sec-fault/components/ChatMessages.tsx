@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, ThumbsUp, ThumbsDown, RotateCw } from "lucide-react";
+import { Copy, ThumbsUp, ThumbsDown, RotateCw, Clapperboard } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +17,7 @@ interface ChatMessagesProps {
   messages: Message[];
   onSuggestionClick: (text: string) => void;
   onRegenerate?: (userMessage: string) => void;
+  onVideoClick?: (message: Message) => void;
   loading?: boolean;
 }
 
@@ -37,7 +38,7 @@ function LoadingIndicator() {
   );
 }
 
-export default function ChatMessages({ messages, loading , onSuggestionClick, onRegenerate }: ChatMessagesProps) {
+export default function ChatMessages({ messages, loading , onSuggestionClick, onRegenerate, onVideoClick }: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
@@ -191,6 +192,13 @@ export default function ChatMessages({ messages, loading , onSuggestionClick, on
                     className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
                   >
                     <RotateCw className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onVideoClick?.(msg)}
+                    title="Generate video"
+                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                  >
+                    <Clapperboard className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>

@@ -9,11 +9,8 @@ google-generativeai
 python-dotenv
 sqlalchemy[asyncio]
 asyncpg
-psycopg2-binary
 beautifulsoup4
 lxml
 qdrant-client
-redis
 sec-edgar-downloader
-pytest
-pytest-asyncio==1.0.0
+edge-tts
