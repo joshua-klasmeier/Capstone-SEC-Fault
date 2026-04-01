@@ -48,7 +48,18 @@ IS_PROD = any(origin.startswith("https://") for origin in FRONTEND_ORIGINS)
 COOKIE_SAMESITE: str = "none" if IS_PROD else "lax"
 COOKIE_SECURE: bool = IS_PROD
 
-app = FastAPI(title="SEC Fault API", lifespan=lifespan)
+AUTH_TAG = "Authentication"
+
+app = FastAPI(
+    title="SEC Fault API",
+    lifespan=lifespan,
+    openapi_tags=[
+        {
+            "name": AUTH_TAG,
+            "description": "Authentication and session management endpoints.",
+        }
+    ],
+)
 
 app.include_router(ingestion_router)
 app.include_router(conversations_router)
@@ -87,7 +98,7 @@ def _cookie_kwargs() -> dict:
         "path": "/",
     }
 
-@app.get("/auth/login")
+@app.get("/auth/login", tags=[AUTH_TAG])
 async def login(request: Request):
     """
     Begin Google OAuth login by redirecting the user to Google's
@@ -96,7 +107,7 @@ async def login(request: Request):
     return await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
 
 
-@app.get("/auth/callback")
+@app.get("/auth/callback", tags=[AUTH_TAG])
 async def auth_callback(request: Request):
     """
     Handle the Google OAuth callback, retrieve the user's profile,
@@ -177,7 +188,7 @@ async def auth_callback(request: Request):
     return response
 
 
-@app.get("/auth/me")
+@app.get("/auth/me", tags=[AUTH_TAG])
 def auth_me(request: Request):
     """
     Return basic information about the currently authenticated user
@@ -192,7 +203,7 @@ def auth_me(request: Request):
     return {"user": {"name": name, "email": email}}
 
 
-@app.get("/auth/debug")
+@app.get("/auth/debug", tags=[AUTH_TAG])
 def auth_debug(request: Request):
     """Return safe auth diagnostics for production troubleshooting."""
     return {
@@ -205,7 +216,7 @@ def auth_debug(request: Request):
     }
 
 
-@app.post("/auth/logout")
+@app.post("/auth/logout", tags=[AUTH_TAG])
 def auth_logout(response: Response):
     """
     Log out the current user by clearing auth cookies.
