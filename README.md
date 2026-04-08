@@ -10,6 +10,7 @@ The goal is to help users stay informed about company financial updates without 
 - Generates plain English, news-style summaries
 - Uses LLM-powered summarization
 - Designed for users who want quick financial insights
+- User preferences for response complexity (`Beginner` or `Expert`)
 
 ## Tech Stack
 **Frontend:** Next.js, React, TypeScript  

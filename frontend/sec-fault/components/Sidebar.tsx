@@ -4,7 +4,15 @@ import { apiUrl } from "@/lib/api";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, FileText, History, Plus, Menu, MessageSquare } from "lucide-react";
+import {
+  Home,
+  FileText,
+  History,
+  Plus,
+  Menu,
+  MessageSquare,
+  SlidersHorizontal,
+} from "lucide-react";
 
 type SidebarUser = {
   name: string | null;
@@ -102,6 +110,11 @@ export default function Sidebar({
       href: "/history",
       label: "History",
       icon: History,
+    },
+    {
+      href: "/preferences",
+      label: "Preferences",
+      icon: SlidersHorizontal,
     },
   ];
 
