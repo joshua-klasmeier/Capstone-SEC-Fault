@@ -91,6 +91,18 @@ export default function ChatMessages({ messages, loading , onSuggestionClick, on
               </div>
             ) : (
               <div key={msg.id} className="flex flex-col gap-2 animate-fade-in">
+                {msg.content === "..." ? (
+                  <div className="max-w-[85%] text-sm leading-relaxed text-text-primary">
+                    <div className="flex items-center gap-2 py-2">
+                      <div className="loading-dots flex gap-1.5">
+                        <span className="dot h-2 w-2 rounded-full bg-accent opacity-60" />
+                        <span className="dot h-2 w-2 rounded-full bg-accent opacity-60" />
+                        <span className="dot h-2 w-2 rounded-full bg-accent opacity-60" />
+                      </div>
+                      <span className="text-text-secondary text-xs ml-1">Analyzing...</span>
+                    </div>
+                  </div>
+              ) : (
                 <div className="max-w-[85%] text-sm leading-relaxed text-text-primary prose-container">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -144,9 +156,9 @@ export default function ChatMessages({ messages, loading , onSuggestionClick, on
                     {msg.content}
                   </ReactMarkdown>
                 </div>
+              )}
 
-                {/* Suggestion pills */}
-                {msg.suggestions && msg.suggestions.length > 0 && (
+                {msg.content !== "..." && msg.suggestions && msg.suggestions.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-1">
                     {msg.suggestions.map((s, i) => (
                       <button
@@ -160,51 +172,52 @@ export default function ChatMessages({ messages, loading , onSuggestionClick, on
                   </div>
                 )}
 
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => handleCopy(msg.content, msg.id)}
-                    title={copiedId === msg.id ? "Copied!" : "Copy message"}
-                    className={`rounded-md p-1.5 transition-all ${
-                      copiedId === msg.id 
-                        ? 'bg-accent/20 text-accent' 
-                        : 'text-text-secondary hover:bg-border hover:text-text-primary'
-                    }`}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleThumbsUp(msg.id)}
-                    title="Like"
-                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-accent"
-                  >
-                    <ThumbsUp className="h-3.5 w-3.5" />
-                  </button>
-                  <button 
-                    onClick={() => handleThumbsDown(msg.id)}
-                    title="Dislike"
-                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-red-500"
-                  >
-                    <ThumbsDown className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleRegenerate(msg.id)}
-                    title="Regenerate"
-                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => onVideoClick?.(msg)}
-                    title="Generate video"
-                    className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-                  >
-                    <Clapperboard className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                {msg.content !== "..." && (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleCopy(msg.content, msg.id)}
+                      title={copiedId === msg.id ? "Copied!" : "Copy message"}
+                      className={`rounded-md p-1.5 transition-all ${
+                        copiedId === msg.id 
+                          ? 'bg-accent/20 text-accent' 
+                          : 'text-text-secondary hover:bg-border hover:text-text-primary'
+                      }`}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleThumbsUp(msg.id)}
+                      title="Like"
+                      className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-accent"
+                    >
+                      <ThumbsUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button 
+                      onClick={() => handleThumbsDown(msg.id)}
+                      title="Dislike"
+                      className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-red-500"
+                    >
+                      <ThumbsDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleRegenerate(msg.id)}
+                      title="Regenerate"
+                      className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                    >
+                      <RotateCw className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onVideoClick?.(msg)}
+                      title="Generate video"
+                      className="rounded-md p-1.5 text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                    >
+                      <Clapperboard className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             )
           )}
-          {loading && <LoadingIndicator />}
         </div>
       </div>
     </div>
