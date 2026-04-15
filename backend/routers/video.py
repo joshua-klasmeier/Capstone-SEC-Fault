@@ -26,18 +26,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/video", tags=["video"])
 DEFAULT_COMPLEXITY = "beginner"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_DIR = BACKEND_ROOT / "public"
 DEFAULT_VIDEO_ASSETS = {
     "beginner": {
-        "background": "backend/public/Sec_file_static_image.png",
-        "neutral": "backend/public/neutral_peter_avatar.png",
-        "happy": "backend/public/positive_peter_avatar.png",
-        "sad": "backend/public/concerned_peter_avatar.png",
+        "background": str(PUBLIC_DIR / "Sec_file_static_image.png"),
+        "neutral": str(PUBLIC_DIR / "neutral_peter_avatar.png"),
+        "happy": str(PUBLIC_DIR / "positive_peter_avatar.png"),
+        "sad": str(PUBLIC_DIR / "concerned_peter_avatar.png"),
     },
     "expert": {
-        "background": "backend/public/Sec_file_static_image.png",
-        "neutral": "backend/public/neutral_peter_avatar.png",
-        "happy": "backend/public/positive_peter_avatar.png",
-        "sad": "backend/public/concerned_peter_avatar.png",
+        "background": str(PUBLIC_DIR / "Sec_file_static_image.png"),
+        "neutral": str(PUBLIC_DIR / "neutral_peter_avatar.png"),
+        "happy": str(PUBLIC_DIR / "positive_peter_avatar.png"),
+        "sad": str(PUBLIC_DIR / "concerned_peter_avatar.png"),
     },
 }
 
@@ -106,6 +108,18 @@ async def _get_user_video_preference(
     return result.scalar_one_or_none()
 
 
+def _existing_file_or_none(path_value: str | None) -> str | None:
+    if not path_value:
+        return None
+    candidate = Path(path_value)
+    if not candidate.is_absolute():
+        candidate = (BACKEND_ROOT.parent / candidate).resolve()
+    if candidate.exists() and candidate.is_file():
+        return str(candidate)
+    logger.warning("Ignoring invalid stored asset path: %s", path_value)
+    return None
+
+
 def _resolve_effective_assets(
     req: VideoGenerateRequest,
     response_complexity: str,
@@ -115,11 +129,19 @@ def _resolve_effective_assets(
         response_complexity, DEFAULT_VIDEO_ASSETS["beginner"]
     )
 
-    # Assets are now managed through Preferences.
-    background = (pref.background_image_path if pref else None) or defaults["background"]
-    neutral = (pref.neutral_avatar_image_path if pref else None) or defaults["neutral"]
-    happy = (pref.happy_avatar_image_path if pref else None) or defaults["happy"]
-    sad = (pref.sad_avatar_image_path if pref else None) or defaults["sad"]
+    # Prefer custom assets only when they still exist on disk; otherwise use defaults.
+    background = _existing_file_or_none(
+        pref.background_image_path if pref else None
+    ) or defaults["background"]
+    neutral = _existing_file_or_none(
+        pref.neutral_avatar_image_path if pref else None
+    ) or defaults["neutral"]
+    happy = _existing_file_or_none(
+        pref.happy_avatar_image_path if pref else None
+    ) or defaults["happy"]
+    sad = _existing_file_or_none(
+        pref.sad_avatar_image_path if pref else None
+    ) or defaults["sad"]
 
     return str(background), str(neutral), str(happy), str(sad)
 
