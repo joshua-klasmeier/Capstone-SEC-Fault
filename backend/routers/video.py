@@ -12,14 +12,17 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.background import BackgroundTask
 
 from db.database import get_db
-from db.models import User, UserVideoPreference
+from db.models import User, UserGoogleToken, UserVideoPreference
 from routers import conversations as chat_router
 from video.pipeline import (
     VideoPipelineError,
     run_video_generation_pipeline_inline,
+)
+from video.youtube_upload import (
+    YouTubeUploadError,
+    upload_video_to_youtube,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,6 +76,17 @@ class VideoScriptRequest(BaseModel):
     ticker: str | None = None
     form_type: str | None = None
     limit: int = Field(default=8, ge=1, le=12)
+
+
+class YouTubeUploadRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=5000)
+    tags: list[str] = Field(default_factory=list)
+    # YouTube enforces: public, unlisted, private. Unverified OAuth apps
+    # will have uploads forced to private regardless of this value.
+    privacy_status: str = Field(default="private")
+    category_id: str = Field(default="22")
+    made_for_kids: bool = Field(default=False)
 
 
 def _require_auth(request: Request) -> dict:
@@ -369,7 +383,12 @@ async def get_job_status(job_id: str):
 
 @router.get("/jobs/{job_id}/download")
 async def download_job_video(job_id: str):
-    """Download the finished video. Cleans up temp files after sending."""
+    """Download the finished video.
+
+    The temp file is intentionally NOT cleaned up here so the user can
+    also upload the same video to YouTube afterwards. Cleanup happens
+    via DELETE /video/jobs/{job_id} or automatically on server restart.
+    """
     job = _jobs.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -377,18 +396,83 @@ async def download_job_video(job_id: str):
         raise HTTPException(status_code=409, detail="Video is not ready yet")
 
     video_file = Path(job["video_file"])
-    temp_dir = job.get("temp_dir", "")
-
     if not video_file.exists():
         raise HTTPException(status_code=410, detail="Video file has been cleaned up")
-
-    def _cleanup() -> None:
-        _cleanup_temp_video_dir(temp_dir)
-        _jobs.pop(job_id, None)
 
     return FileResponse(
         path=str(video_file),
         media_type="video/mp4",
         filename=video_file.name,
-        background=BackgroundTask(_cleanup),
     )
+
+
+@router.post("/jobs/{job_id}/youtube")
+async def upload_job_to_youtube(
+    job_id: str,
+    req: YouTubeUploadRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a completed video job to the authenticated user's YouTube channel."""
+    job = _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") != "completed":
+        raise HTTPException(status_code=409, detail="Video is not ready yet")
+
+    video_file = Path(job["video_file"])
+    if not video_file.exists():
+        raise HTTPException(status_code=410, detail="Video file has been cleaned up")
+
+    auth = _require_auth(request)
+    user = await _get_or_create_user(auth["email"], auth["name"], db)
+
+    token_result = await db.execute(
+        select(UserGoogleToken).where(UserGoogleToken.user_id == user.id)
+    )
+    token_row = token_result.scalar_one_or_none()
+    if token_row is None or not token_row.access_token:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "No Google OAuth token stored. Please sign out and sign in "
+                "again to grant YouTube upload permission."
+            ),
+        )
+
+    try:
+        result = await asyncio.to_thread(
+            upload_video_to_youtube,
+            video_file_path=str(video_file),
+            access_token=token_row.access_token,
+            refresh_token=token_row.refresh_token,
+            title=req.title,
+            description=req.description,
+            tags=req.tags,
+            privacy_status=req.privacy_status,
+            category_id=req.category_id,
+            made_for_kids=req.made_for_kids,
+        )
+    except YouTubeUploadError as exc:
+        logger.warning("YouTube upload failed for job %s: %s", job_id, exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Unexpected YouTube upload error for job %s", job_id)
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected YouTube upload error: {exc}"
+        ) from exc
+
+    # Remember the upload on the job so clients can re-read it.
+    job["youtube"] = result
+
+    return result
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_job(job_id: str):
+    """Remove a finished job and clean up its temp files."""
+    job = _jobs.pop(job_id, None)
+    if job is None:
+        return {"deleted": False}
+    _cleanup_temp_video_dir(job.get("temp_dir", ""))
+    return {"deleted": True}

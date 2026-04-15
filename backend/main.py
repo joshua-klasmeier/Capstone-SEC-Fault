@@ -16,7 +16,12 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()
 
-from db.database import init_db
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+
+from db.database import AsyncSessionLocal, init_db
+from db.models import User, UserGoogleToken
 from routers.ingestion import router as ingestion_router
 from routers.conversations import router as conversations_router
 from routers.video import router as video_router
@@ -91,13 +96,30 @@ app.add_middleware(
     https_only=COOKIE_SECURE,
 )
 
+# YouTube upload requires the youtube.upload scope. We also ask for
+# access_type=offline + prompt=consent so Google returns a refresh_token
+# the first time a user authorizes, which is required to keep uploading
+# later without re-prompting.
+GOOGLE_OAUTH_SCOPES = " ".join(
+    [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/youtube.upload",
+    ]
+)
+
 oauth = OAuth()
 oauth.register(
     name="google",
     client_id=os.getenv("GOOGLE_CLIENT_ID"),
     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    client_kwargs={"scope": "openid email profile"},
+    client_kwargs={
+        "scope": GOOGLE_OAUTH_SCOPES,
+        "access_type": "offline",
+        "prompt": "consent",
+    },
 )
 
 
@@ -108,6 +130,64 @@ def _cookie_kwargs() -> dict:
         "samesite": COOKIE_SAMESITE,
         "path": "/",
     }
+
+
+async def _persist_google_token(
+    email: str,
+    name: str | None,
+    access_token: str | None,
+    refresh_token: str | None,
+    expires_at: int | float | None,
+    scope: str | None,
+) -> None:
+    """Upsert the Google OAuth token for a user.
+
+    Google returns a refresh_token only on the first consent for a given
+    client, so when re-logging we preserve any previously stored
+    refresh_token if the latest response omits it.
+    """
+    if not access_token:
+        return
+
+    expiry_dt: datetime | None = None
+    if expires_at:
+        try:
+            expiry_dt = datetime.fromtimestamp(float(expires_at), tz=timezone.utc)
+        except (TypeError, ValueError, OSError):
+            expiry_dt = None
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if user is None:
+            user = User(email=email, name=name, response_complexity="beginner")
+            db.add(user)
+            await db.flush()
+
+        token_result = await db.execute(
+            select(UserGoogleToken).where(UserGoogleToken.user_id == user.id)
+        )
+        token_row = token_result.scalar_one_or_none()
+
+        if token_row is None:
+            token_row = UserGoogleToken(
+                user_id=user.id,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_expiry=expiry_dt,
+                scope=scope,
+            )
+            db.add(token_row)
+        else:
+            token_row.access_token = access_token
+            # Preserve prior refresh_token when Google doesn't send a new one.
+            if refresh_token:
+                token_row.refresh_token = refresh_token
+            token_row.token_expiry = expiry_dt
+            if scope:
+                token_row.scope = scope
+
+        await db.commit()
 
 
 def _normalize_next_path(next_path: str | None) -> str:
@@ -187,6 +267,23 @@ async def auth_callback(request: Request):
         return RedirectResponse(url=f"{FRONTEND_URL}/login?{login_query}")
 
     user_info = token.get("userinfo") or {}
+
+    # Persist the Google OAuth token so we can use it later for YouTube
+    # uploads on behalf of the user. We store refresh_token when Google
+    # returns one (usually only on first consent with access_type=offline).
+    email_for_token = user_info.get("email")
+    if email_for_token and AsyncSessionLocal is not None:
+        try:
+            await _persist_google_token(
+                email=email_for_token,
+                name=user_info.get("name") or user_info.get("given_name"),
+                access_token=token.get("access_token"),
+                refresh_token=token.get("refresh_token"),
+                expires_at=token.get("expires_at"),
+                scope=token.get("scope"),
+            )
+        except Exception:
+            logger.exception("Failed to persist Google OAuth token")
 
     response = RedirectResponse(url=f"{FRONTEND_URL}{redirect_path}")
 

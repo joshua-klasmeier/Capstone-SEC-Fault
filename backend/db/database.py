@@ -69,3 +69,21 @@ async def init_db():
                 "ALTER COLUMN response_complexity SET DEFAULT 'beginner'"
             )
         )
+        # user_google_tokens is a newer table; ensure it exists for
+        # environments that were provisioned before the YouTube upload feature.
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS user_google_tokens (
+                    id UUID PRIMARY KEY,
+                    user_id UUID NOT NULL UNIQUE REFERENCES users(id),
+                    access_token TEXT NOT NULL,
+                    refresh_token TEXT,
+                    token_expiry TIMESTAMPTZ,
+                    scope TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+        )

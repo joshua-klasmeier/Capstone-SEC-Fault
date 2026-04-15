@@ -6,6 +6,14 @@ import Sidebar from "@/components/Sidebar";
 import { Menu } from "lucide-react";
 import { useEffect } from "react";
 
+type YouTubePrivacy = "public" | "unlisted" | "private";
+
+type YouTubeUploadResult = {
+  video_id: string;
+  video_url: string;
+  privacy_status: YouTubePrivacy;
+};
+
 export default function VideoPage() {
   const [sideBarOpen, setSideBarOpen] = useState(false);
   const [videoPrompt, setVideoPrompt] = useState("");
@@ -17,6 +25,14 @@ export default function VideoPage() {
   const [videoScript, setVideoScript] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [enableDynamicAvatar, setEnableDynamicAvatar] = useState(true);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [ytTitle, setYtTitle] = useState("");
+  const [ytDescription, setYtDescription] = useState("");
+  const [ytTags, setYtTags] = useState("");
+  const [ytPrivacy, setYtPrivacy] = useState<YouTubePrivacy>("private");
+  const [ytUploading, setYtUploading] = useState(false);
+  const [ytError, setYtError] = useState<string | null>(null);
+  const [ytResult, setYtResult] = useState<YouTubeUploadResult | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -62,6 +78,22 @@ export default function VideoPage() {
     const handleGenerateVideo = async () => {
       setVideoLoading(true);
       setVideoError(null);
+      setYtError(null);
+      setYtResult(null);
+
+      // If there was a previous job, ask the backend to clean it up so we
+      // don't leak temp files across generations.
+      if (jobId) {
+        try {
+          await fetch(apiUrl(`/video/jobs/${jobId}`), {
+            method: "DELETE",
+            credentials: "include",
+          });
+        } catch {
+          // Best-effort cleanup — ignore failures.
+        }
+        setJobId(null);
+      }
 
       try {
         if (!prompt.trim()) {
@@ -123,14 +155,76 @@ export default function VideoPage() {
         const objectUrl = URL.createObjectURL(blob);
         objectUrlRef.current = objectUrl;
 
+        setJobId(job_id);
         setVideoScript(prompt.trim());
         setVideoUrl(objectUrl);
+
+        // Seed a sensible default YouTube title from the request prompt.
+        if (!ytTitle) {
+          const seed = videoPrompt.trim() || "SEC Fault Explainer";
+          setYtTitle(seed.slice(0, 90));
+        }
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Video generation failed";
         setVideoError(message);
       } finally {
         setVideoLoading(false);
+      }
+    };
+
+    const handleUploadToYouTube = async () => {
+      if (!jobId) {
+        setYtError("Generate a video first before uploading.");
+        return;
+      }
+      if (!ytTitle.trim()) {
+        setYtError("A YouTube title is required.");
+        return;
+      }
+
+      setYtUploading(true);
+      setYtError(null);
+      setYtResult(null);
+
+      try {
+        const tags = ytTags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+
+        const res = await fetch(apiUrl(`/video/jobs/${jobId}/youtube`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            title: ytTitle.trim().slice(0, 100),
+            description: ytDescription.trim().slice(0, 5000),
+            tags,
+            privacy_status: ytPrivacy,
+          }),
+        });
+
+        if (!res.ok) {
+          let detail = "YouTube upload failed";
+          try {
+            const data = await res.json();
+            if (typeof data?.detail === "string") detail = data.detail;
+          } catch {
+            const text = await res.text();
+            if (text) detail = text;
+          }
+          throw new Error(detail);
+        }
+
+        const data = (await res.json()) as YouTubeUploadResult;
+        setYtResult(data);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "YouTube upload failed";
+        setYtError(message);
+      } finally {
+        setYtUploading(false);
       }
     };
 
@@ -265,6 +359,106 @@ export default function VideoPage() {
                   >
                     Download video
                   </a>
+                </div>
+              )}
+
+              {videoUrl && jobId && (
+                <div className="space-y-4 rounded-lg border border-border bg-surface p-6">
+                  <div>
+                    <h2 className="text-lg font-semibold text-text-primary">
+                      3) Upload to YouTube
+                    </h2>
+                    <p className="mt-1 text-sm text-text-secondary">
+                      Publishes this video to the YouTube channel of the Google
+                      account you signed in with. Unverified apps have uploads
+                      locked to <code>private</code> until Google verifies the
+                      OAuth client.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="block text-sm font-semibold text-text-primary">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={ytTitle}
+                      maxLength={100}
+                      onChange={(e) => setYtTitle(e.target.value)}
+                      placeholder="Title shown on YouTube"
+                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+                      disabled={ytUploading}
+                    />
+
+                    <label className="block text-sm font-semibold text-text-primary">
+                      Description
+                    </label>
+                    <textarea
+                      value={ytDescription}
+                      onChange={(e) => setYtDescription(e.target.value)}
+                      placeholder="Optional description"
+                      className="h-24 w-full rounded-lg border border-border bg-background px-4 py-2 text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+                      disabled={ytUploading}
+                    />
+
+                    <label className="block text-sm font-semibold text-text-primary">
+                      Tags (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={ytTags}
+                      onChange={(e) => setYtTags(e.target.value)}
+                      placeholder="e.g. SEC, earnings, finance"
+                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+                      disabled={ytUploading}
+                    />
+
+                    <label className="block text-sm font-semibold text-text-primary">
+                      Privacy
+                    </label>
+                    <select
+                      value={ytPrivacy}
+                      onChange={(e) =>
+                        setYtPrivacy(e.target.value as YouTubePrivacy)
+                      }
+                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                      disabled={ytUploading}
+                    >
+                      <option value="private">Private</option>
+                      <option value="unlisted">Unlisted</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={handleUploadToYouTube}
+                    disabled={ytUploading || !ytTitle.trim()}
+                    className="w-full rounded-lg bg-accent px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {ytUploading ? "Uploading to YouTube..." : "Upload to YouTube"}
+                  </button>
+
+                  {ytError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                      <p className="text-sm text-red-700">{ytError}</p>
+                    </div>
+                  )}
+
+                  {ytResult && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="text-sm text-green-800">
+                        Uploaded as <strong>{ytResult.privacy_status}</strong>.{" "}
+                        <a
+                          href={ytResult.video_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline"
+                        >
+                          View on YouTube
+                        </a>
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
