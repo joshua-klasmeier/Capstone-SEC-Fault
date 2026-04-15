@@ -1,7 +1,5 @@
 import os
 import logging
-import hashlib
-import sys
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -120,34 +118,6 @@ def _normalize_next_path(next_path: str | None) -> str:
     if next_path.startswith("//"):
         return "/"
     return next_path
-
-
-def _runtime_revision() -> str | None:
-    """Best-effort commit/build identifier from common deployment environments."""
-    for key in (
-        "VERCEL_GIT_COMMIT_SHA",
-        "RENDER_GIT_COMMIT",
-        "RAILWAY_GIT_COMMIT_SHA",
-        "GITHUB_SHA",
-        "COMMIT_SHA",
-    ):
-        value = (os.getenv(key) or "").strip()
-        if value:
-            return value
-    return None
-
-
-def _file_sha256(path: Path) -> str | None:
-    if not path.exists() or not path.is_file():
-        return None
-    hasher = hashlib.sha256()
-    with path.open("rb") as f:
-        while True:
-            chunk = f.read(8192)
-            if not chunk:
-                break
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 @app.get("/auth/login", tags=[AUTH_TAG])
 async def login(request: Request):
@@ -272,35 +242,6 @@ def auth_debug(request: Request):
         "has_oauth_session_cookie": "sec_fault_oauth_session" in request.cookies,
         "has_user_email_cookie": "sec_fault_user_email" in request.cookies,
         "cookie_names": sorted(list(request.cookies.keys())),
-    }
-
-
-@app.get("/diag/deploy")
-def deployment_diagnostics():
-    """Expose safe runtime diagnostics to verify what code is deployed."""
-    backend_root = Path(__file__).resolve().parent
-    preferences_file = backend_root / "routers" / "preferences.py"
-
-    route_paths = sorted(
-        {
-            route.path
-            for route in app.routes
-            if getattr(route, "path", None)
-        }
-    )
-    preferences_routes = [path for path in route_paths if path.startswith("/preferences")]
-
-    return {
-        "runtime_revision": _runtime_revision(),
-        "python_version": sys.version.split()[0],
-        "working_directory": os.getcwd(),
-        "app_file": str(Path(__file__).resolve()),
-        "preferences_file": str(preferences_file),
-        "preferences_file_sha256": _file_sha256(preferences_file),
-        "preferences_route_count": len(preferences_routes),
-        "preferences_routes": preferences_routes,
-        "has_video_assets_post_route": "/preferences/me/video-assets" in route_paths,
-        "has_video_assets_delete_route": "/preferences/me/video-assets/{slot}" in route_paths,
     }
 
 
