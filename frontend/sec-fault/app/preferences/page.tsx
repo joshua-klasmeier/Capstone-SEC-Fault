@@ -23,6 +23,34 @@ type PendingDeletionState = {
   background_image: boolean;
 };
 
+async function readApiErrorMessage(
+  res: Response,
+  fallbackMessage: string
+): Promise<string> {
+  const contentType = res.headers.get("content-type") || "";
+
+  try {
+    if (contentType.includes("application/json")) {
+      const data = await res.json();
+      if (typeof data?.detail === "string" && data.detail.trim()) return data.detail;
+      if (typeof data?.message === "string" && data.message.trim()) return data.message;
+      if (typeof data?.error === "string" && data.error.trim()) return data.error;
+      if (Array.isArray(data?.detail) && data.detail.length > 0) {
+        const first = data.detail[0];
+        if (typeof first?.msg === "string" && first.msg.trim()) return first.msg;
+      }
+    } else {
+      const text = (await res.text()).trim();
+      if (text) return text;
+    }
+  } catch {
+    // Ignore parse errors and fall back to status-based message.
+  }
+
+  const statusLabel = `${res.status}${res.statusText ? ` ${res.statusText}` : ""}`;
+  return `${fallbackMessage} (${statusLabel}).`;
+}
+
 export default function PreferencesPage() {
   const [sideBarOpen, setSideBarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -199,7 +227,13 @@ export default function PreferencesPage() {
         window.location.href = "/login";
         return;
       }
-      if (!res.ok) throw new Error("Failed to save avatar preferences");
+      if (!res.ok) {
+        const message = await readApiErrorMessage(
+          res,
+          "Unable to save avatar settings"
+        );
+        throw new Error(message);
+      }
 
       const data = await res.json();
       applyVideoPrefsFromResponse(data);
@@ -208,8 +242,12 @@ export default function PreferencesPage() {
       setSadAvatarFile(null);
       setBackgroundFile(null);
       setAssetMessage("Video avatar settings saved.");
-    } catch {
-      setAssetError("Unable to save avatar settings. Please try again.");
+    } catch (err) {
+      if (err instanceof Error && err.message.trim()) {
+        setAssetError(err.message);
+      } else {
+        setAssetError("Unable to save avatar settings. Please try again.");
+      }
     } finally {
       setAssetSaving(false);
     }
