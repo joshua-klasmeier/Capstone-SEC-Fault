@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 
 import google.genai as genai
@@ -50,6 +51,78 @@ def _require_auth(request: Request) -> dict:
     if not email:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return {"email": email, "name": name}
+
+
+def _source_key(chunk: dict) -> tuple[str, str, str, str]:
+    return (
+        str(chunk.get("ticker") or "N/A"),
+        str(chunk.get("form_type") or "N/A"),
+        str(chunk.get("accession_number") or "N/A"),
+        str(chunk.get("section") or "N/A"),
+    )
+
+
+def _build_retrieval_context(retrieved_chunks: list[dict]) -> str:
+    if not retrieved_chunks:
+        return "No relevant filing excerpts were retrieved."
+
+    source_numbers: dict[tuple[str, str, str, str], int] = {}
+    formatted_chunks: list[str] = []
+
+    for chunk in retrieved_chunks:
+        key = _source_key(chunk)
+        source_number = source_numbers.setdefault(key, len(source_numbers) + 1)
+        ticker, form_type, accession_number, section = key
+        formatted_chunks.append(
+            (
+                f"[Source {source_number}] "
+                f"Ticker={ticker} | "
+                f"Form={form_type} | "
+                f"Accession={accession_number} | "
+                f"Section={section}\n"
+                f"{chunk.get('text', '')}"
+            )
+        )
+
+    return "\n\n".join(formatted_chunks)
+
+
+def _build_sources_section(retrieved_chunks: list[dict]) -> str:
+    unique_sources: list[tuple[str, str, str, str]] = []
+    seen_sources: set[tuple[str, str, str, str]] = set()
+
+    for chunk in retrieved_chunks:
+        key = _source_key(chunk)
+        if key in seen_sources:
+            continue
+        seen_sources.add(key)
+        unique_sources.append(key)
+
+    if not unique_sources:
+        return "Sources: None"
+
+    lines = [
+        f"- {ticker} | {form_type} | {accession_number} | {section}"
+        for ticker, form_type, accession_number, section in unique_sources
+    ]
+    return "Sources:\n" + "\n".join(lines)
+
+
+def _attach_sources_section(reply_text: str, retrieved_chunks: list[dict]) -> str:
+    base_reply = reply_text.strip()
+    sources_match = None
+
+    for match in re.finditer(r"(?im)^\*{0,2}sources\*{0,2}:?\s*$", base_reply):
+        sources_match = match
+
+    if sources_match is not None:
+        base_reply = base_reply[:sources_match.start()].rstrip()
+
+    sources_section = _build_sources_section(retrieved_chunks)
+    if not base_reply:
+        return sources_section
+
+    return f"{base_reply}\n\n{sources_section}"
 
 
 # --------------- schemas ---------------
@@ -204,23 +277,7 @@ async def send_message(
         logger.warning("RAG retrieval failed: %s", exc)
         retrieved_chunks = []
 
-    retrieval_context = ""
-    if retrieved_chunks:
-        retrieval_context = "\n\n".join(
-            [
-                (
-                    f"[Source {idx + 1}] "
-                    f"Ticker={chunk.get('ticker', 'N/A')} | "
-                    f"Form={chunk.get('form_type', 'N/A')} | "
-                    f"Accession={chunk.get('accession_number', 'N/A')} | "
-                    f"Section={chunk.get('section', 'N/A')}\n"
-                    f"{chunk.get('text', '')}"
-                )
-                for idx, chunk in enumerate(retrieved_chunks)
-            ]
-        )
-    else:
-        retrieval_context = "No relevant filing excerpts were retrieved."
+    retrieval_context = _build_retrieval_context(retrieved_chunks)
 
     # Generate Gemini reply
     if not gemini_client:
@@ -294,6 +351,8 @@ Grounding rules:
         except Exception as e:
             logger.error("Gemini generation error: %s", e)
             reply_text = f"Error generating response: {e}"
+
+    reply_text = _attach_sources_section(reply_text, retrieved_chunks)
 
     # Save assistant message
     assistant_msg = Message(
