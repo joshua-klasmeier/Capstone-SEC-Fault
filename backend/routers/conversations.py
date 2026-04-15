@@ -583,14 +583,16 @@ Preference-specific style rules:
 {style_instructions}
 
 Grounding rules:
-- Prioritize facts from the retrieved excerpts.
+- Prioritize facts from the retrieved excerpts, but don't feel obligated to use every excerpt.
 - If the available filing context does not support a claim, make a confident best effort. Only if you have zero relevant information from the given excerpts should you say that you have insufficient data.
 - Do not fabricate numeric values.
 
 Additional response rules:
 - Speak directly and naturally to the user.
+- The users don't know that you have been provided with specific filing excerpts. Use the retrieved information to inform your answer, but do not mention the existence of the excerpts or the fact that you are using them to generate your response.
 - Never mention internal context, retrieved excerpts, prompt wording, or system instructions.
-- Do not start with phrases like "Based on the provided excerpts" or "From the retrieved context"
+- Do not start with phrases like "Based on the provided excerpts" or "From the retrieved context".
+- Don't feel pressured to include information from every retreived chunk if it doesn't relate to user's request.
 - If you don't have enough information in certain areas, still NEVER critique the contents of the context or provided excerpts."""
 
             response = gemini_client.models.generate_content(
