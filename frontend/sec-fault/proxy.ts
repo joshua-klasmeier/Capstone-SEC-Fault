@@ -5,7 +5,7 @@ const AUTH_COOKIE_NAMES = [
   "sec_fault_user_name",
 ] as const;
 
-const PUBLIC_PATHS = new Set(["/login", "/about", "/terms"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/about", "/terms"]);
 
 function isAuthenticated(request: NextRequest): boolean {
   return AUTH_COOKIE_NAMES.some((cookieName) =>
