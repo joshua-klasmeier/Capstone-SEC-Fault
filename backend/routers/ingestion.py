@@ -13,6 +13,9 @@ class IngestRequest(BaseModel):
     ticker: str
     form_type: str = "10-K"
 
+class IngestListRequest(BaseModel):
+    tickers: list[str]
+    form_types: list[str] = ["10-K"]
 
 class QueryRequest(BaseModel):
     query: str
@@ -28,6 +31,15 @@ async def ingest(req: IngestRequest, db=Depends(get_db)):
     result = await pipeline.ingest_filing(req.ticker, req.form_type, db)
     return result
 
+@router.post("/ingest_list")
+async def ingest_list(req: IngestListRequest, db=Depends(get_db)):
+    results = []
+    for ticker in req.tickers:
+        for form_type in req.form_types:
+            result = await pipeline.ingest_filing(ticker, form_type, db)
+            results.append(result)
+    return results
+
 
 @router.post("/query")
 async def query(req: QueryRequest):
@@ -40,6 +52,11 @@ async def query(req: QueryRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return results
+
+
+@router.get("/filings")
+async def all_filings(db=Depends(get_db)):
+    return await pipeline.get_all_ingested_filings(db)
 
 
 @router.get("/filings/{ticker}")
