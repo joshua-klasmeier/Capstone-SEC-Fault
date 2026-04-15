@@ -6,11 +6,15 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
+from db.database import get_db
+from db.models import User
 from video.pipeline import (
     VideoPipelineError,
     run_video_generation_pipeline_inline,
@@ -19,6 +23,7 @@ from video.pipeline import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/video", tags=["video"])
+DEFAULT_COMPLEXITY = "beginner"
 
 # ---------------------------------------------------------------------------
 # In-memory job store (single-process; fine for Render single-instance deploy)
@@ -43,6 +48,30 @@ class VideoGenerateRequest(BaseModel):
     tts_model_name: str = "tts_models/en/ljspeech/tacotron2-DDC"
     tts_provider: str = "auto"
     tts_voice: str = "en-US-GuyNeural"
+
+
+def _require_auth(request: Request) -> dict:
+    email = request.cookies.get("sec_fault_user_email")
+    name = request.cookies.get("sec_fault_user_name") or email
+    if not email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"email": email, "name": name}
+
+
+async def _get_or_create_user(email: str, name: str | None, db: AsyncSession) -> User:
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user:
+        return user
+    user = User(email=email, name=name, response_complexity=DEFAULT_COMPLEXITY)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+def _safe_complexity(value: str | None) -> str:
+    return value if value in {"beginner", "expert"} else DEFAULT_COMPLEXITY
 
 
 def _cleanup_temp_video_dir(temp_dir: str) -> None:
@@ -83,14 +112,23 @@ async def _run_job(job_id: str, req: VideoGenerateRequest) -> None:
 
 
 @router.post("/generate")
-async def generate_video(req: VideoGenerateRequest):
+async def generate_video(
+    req: VideoGenerateRequest, request: Request, db: AsyncSession = Depends(get_db)
+):
     """Accept a video generation request and return a job ID immediately."""
     script_text = req.script_text.strip()
     if not script_text:
         raise HTTPException(status_code=400, detail="script_text must not be empty")
 
+    auth = _require_auth(request)
+    user = await _get_or_create_user(auth["email"], auth["name"], db)
+    response_complexity = _safe_complexity(user.response_complexity)
+
     job_id = uuid.uuid4().hex
-    _jobs[job_id] = {"status": "processing"}
+    _jobs[job_id] = {
+        "status": "processing",
+        "response_complexity": response_complexity,
+    }
 
     asyncio.create_task(_run_job(job_id, req))
 

@@ -22,6 +22,7 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 logger = logging.getLogger(__name__)
+DEFAULT_COMPLEXITY = "beginner"
 
 
 # --------------- helpers ---------------
@@ -32,10 +33,14 @@ async def _get_or_create_user(email: str, name: str | None, db: AsyncSession) ->
     user = result.scalar_one_or_none()
     if user:
         return user
-    user = User(email=email, name=name)
+    user = User(email=email, name=name, response_complexity=DEFAULT_COMPLEXITY)
     db.add(user)
     await db.flush()
     return user
+
+
+def _safe_complexity(value: str | None) -> str:
+    return value if value in {"beginner", "expert"} else DEFAULT_COMPLEXITY
 
 
 def _require_auth(request: Request) -> dict:
@@ -165,6 +170,7 @@ async def send_message(
     """Save user message, generate Gemini reply, save and return both."""
     auth = _require_auth(request)
     user = await _get_or_create_user(auth["email"], auth["name"], db)
+    response_complexity = _safe_complexity(user.response_complexity)
 
     convo = await db.get(Conversation, uuid.UUID(chat_id))
     if not convo or convo.user_id != user.id:
@@ -226,6 +232,21 @@ async def send_message(
                 f"{'User' if m.role == 'user' else 'Assistant'}: {m.content}"
                 for m in history
             )
+            style_instructions = (
+                "Complexity preference: BEGINNER.\n"
+                "- Use plain, approachable language.\n"
+                "- Define any financial term before using it.\n"
+                "- Prefer short paragraphs and clear takeaways.\n"
+                "- Avoid dense jargon unless necessary."
+            )
+            if response_complexity == "expert":
+                style_instructions = (
+                    "Complexity preference: EXPERT.\n"
+                    "- Use precise financial terminology where helpful.\n"
+                    "- Provide deeper technical context and nuance.\n"
+                    "- Keep explanations concise but analytically dense.\n"
+                    "- Assume familiarity with core accounting/finance concepts."
+                )
             prompt = f"""You are SEC Fault, an AI assistant that helps users understand SEC filings and financial reports.
 
 Retrieved filing excerpts (highest relevance first):
@@ -240,8 +261,11 @@ You are speaking to a non-finance professional. Your job is to:
 - Highlight key financial metrics like revenue, profit, debt, and growth
 - Explain any major risks the company has disclosed
 - Point out anything unusual or important investors should know
-- Use simple language — avoid heavy financial jargon
+- Match the user's configured complexity level (beginner vs expert)
 - Be concise but thorough
+
+Preference-specific style rules:
+{style_instructions}
 
 Grounding rules:
 - Prioritize facts from the retrieved excerpts.
@@ -250,7 +274,7 @@ Grounding rules:
 - End with a short "Sources" section listing accession number and section for claims used."""
 
             response = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash-lite",
                 contents=prompt,
             )
             reply_text = response.text or ""

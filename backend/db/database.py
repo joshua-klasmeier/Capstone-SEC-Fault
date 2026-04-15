@@ -3,6 +3,7 @@ import ssl
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -42,7 +43,29 @@ async def get_db():
 
 
 async def init_db():
-    """Create all tables defined on Base.metadata."""
+    """Create tables and apply lightweight compatibility patches."""
+    if engine is None:
+        return
+
     import db.models  # noqa: F401 — ensure all models are registered on Base.metadata
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Compatibility patch for existing environments where users table was
+        # created before response_complexity existed. This avoids runtime
+        # failures when ORM selects include the new column.
+        await conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS response_complexity VARCHAR")
+        )
+        await conn.execute(
+            text(
+                "UPDATE users SET response_complexity = 'beginner' "
+                "WHERE response_complexity IS NULL"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE users "
+                "ALTER COLUMN response_complexity SET DEFAULT 'beginner'"
+            )
+        )

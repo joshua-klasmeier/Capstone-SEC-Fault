@@ -168,8 +168,75 @@ function AnalyzeContent() {
     loadConversations();
   };
 
+  const sendMessageToGemini = async (text: string) => {
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: text,
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setLoading(true);
+
+    const thinkingMessageId = (Date.now() + 0.5).toString();
+    const thinkingMessage: Message = {
+      id: thinkingMessageId,
+      role: "assistant",
+      content: "...",
+    };
+    
+    setMessages((prev) => [...prev, thinkingMessage]);
+
+
+    try {
+      const activeId = chatId ?? (await ensureChat());
+
+      const response = await fetch(apiUrl(`/chats/${activeId}/messages`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: text }),
+      });
+
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const data = await response.json();
+
+      const assistantMessage: Message = {
+        id: data.assistant_message?.id ?? (Date.now() + 1).toString(),
+        role: "assistant",
+        content: data.msg_reply,
+        suggestions: data.suggested_queries || [],
+      };
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === thinkingMessageId ? assistantMessage : msg
+        )
+      );
+      loadConversations();
+    } catch (error) {
+      console.error("Error sending message:", error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Sorry, I encountered an error. Please try again.",
+      };
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === thinkingMessageId ? errorMessage : msg
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSuggestionClick = (text: string) => {
-    chatInputRef.current?.sendMessage(text);
+    sendMessageToGemini(text);
   };
 
   const handleVideoClick = (message: Message) => {
@@ -397,6 +464,7 @@ function AnalyzeContent() {
           chatId={chatId}
           ensureChat={ensureChat}
           onNewMessage={handleNewMessage}
+          onSendMessage={sendMessageToGemini}
         />
       </main>
     </div>
