@@ -21,6 +21,31 @@ class User(Base):
     )
 
 
+class UserVideoPreference(Base):
+    __tablename__ = "user_video_preferences"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True
+    )
+    avatar_intro = Column(Text, nullable=True)
+    neutral_avatar_image_path = Column(Text, nullable=True)
+    happy_avatar_image_path = Column(Text, nullable=True)
+    sad_avatar_image_path = Column(Text, nullable=True)
+    background_image_path = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 

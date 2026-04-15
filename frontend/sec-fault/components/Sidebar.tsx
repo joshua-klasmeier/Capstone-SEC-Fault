@@ -12,6 +12,7 @@ import {
   Menu,
   MessageSquare,
   SlidersHorizontal,
+  Film,
 } from "lucide-react";
 
 type SidebarUser = {
@@ -110,6 +111,11 @@ export default function Sidebar({
       href: "/history",
       label: "History",
       icon: History,
+    },
+    {
+      href: "/video",
+      label: "Video Generator",
+      icon: Film,
     },
     {
       href: "/preferences",

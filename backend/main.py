@@ -1,11 +1,13 @@
 import os
 import logging
+from pathlib import Path
 from urllib.parse import urlencode
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
@@ -67,6 +69,11 @@ app.include_router(ingestion_router)
 app.include_router(conversations_router)
 app.include_router(video_router)
 app.include_router(preferences_router)
+
+# Serve user-uploaded images as static files
+_USER_UPLOADS_DIR = Path(__file__).resolve().parent / "public" / "user_uploads"
+_USER_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/user-uploads", StaticFiles(directory=str(_USER_UPLOADS_DIR)), name="user_uploads")
 
 app.add_middleware(
     CORSMiddleware,
