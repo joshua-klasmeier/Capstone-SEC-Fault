@@ -16,7 +16,7 @@ import google.generativeai as genai
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 _MODEL = "models/gemini-embedding-001"
-_BATCH_SIZE = 100
+_BATCH_SIZE = 16
 _EXPECTED_DIM = 3072
 _MAX_RETRIES = 3
 
@@ -39,6 +39,32 @@ def _embed_with_retry(model, content, task_type, retries=_MAX_RETRIES):
                 raise
 
 
+def _extract_embeddings(result) -> list[list[float]]:
+    embeddings = result["embedding"]
+    if embeddings and not isinstance(embeddings[0], list):
+        embeddings = [embeddings]
+    return embeddings
+
+
+def _embed_batch(batch: list[str], task_type: str) -> list[list[float]]:
+    try:
+        result = _embed_with_retry(_MODEL, batch, task_type)
+        return _extract_embeddings(result)
+    except Exception as exc:
+        if len(batch) == 1:
+            raise
+
+        logger.warning(
+            "Batch embedding failed for %d texts; retrying smaller batches. Error: %s",
+            len(batch),
+            exc,
+        )
+        midpoint = len(batch) // 2
+        left_embeddings = _embed_batch(batch[:midpoint], task_type)
+        right_embeddings = _embed_batch(batch[midpoint:], task_type)
+        return left_embeddings + right_embeddings
+
+
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """Embed a list of texts as retrieval documents. Returns one 3072-d vector per text."""
     if not texts:
@@ -55,14 +81,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         if start > 0 and start % _BATCH_SIZE == 0:
             logger.info("Embedding progress: %d/%d chunks", start, len(texts))
 
-        result = _embed_with_retry(_MODEL, batch, "retrieval_document")
-
-        embeddings = result["embedding"]
-        # Single-text batches return a flat list instead of list-of-lists.
-        if embeddings and not isinstance(embeddings[0], list):
-            embeddings = [embeddings]
-
-        all_embeddings.extend(embeddings)
+        all_embeddings.extend(_embed_batch(batch, "retrieval_document"))
 
     return all_embeddings
 

@@ -331,7 +331,7 @@ Grounding rules:
 - End with a short "Sources" section listing accession number and section for claims used."""
 
             response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash-lite",
+                model="gemini-2.5-flash-lite",
                 contents=prompt,
             )
             reply_text = response.text or ""

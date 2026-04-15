@@ -94,10 +94,10 @@ async def ingest_filing(
     try:
         embeddings = embed_texts([chunk["text"] for chunk in chunks])
     except Exception as exc:
-        logger.error("Failed to generate embeddings: %s", exc)
+        logger.error("Failed to generate embeddings for %s %s: %s", ticker, filing["accession_number"], exc)
         return {
             "status": "error",
-            "message": "Failed to generate embeddings",
+            "message": f"Failed to generate embeddings: {exc}",
         }
 
     # Step 8 — Save to PostgreSQL
