@@ -2,21 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const searchParams = useSearchParams();
 
   function handleGoogleLogin() {
     setLoading(true);
     setError(null);
 
     try {
-      const nextPath = searchParams.get("next") || "/";
+      const params = new URLSearchParams(window.location.search);
+      const nextPath = params.get("next") || "/";
       const loginUrl = apiUrl(
         `/auth/login?next=${encodeURIComponent(nextPath)}`,
       );
