@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
-from db.models import Conversation, Message, User
+from db.models import Conversation, Filing, Message, User
 from ingestion import pipeline
 
 load_dotenv()
@@ -24,6 +24,35 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 logger = logging.getLogger(__name__)
 DEFAULT_COMPLEXITY = "beginner"
+_DEFAULT_RETRIEVAL_LIMIT = 8
+_MAX_RETRIEVAL_LIMIT = 12
+
+_EARNINGS_KEYWORDS = (
+    "earnings",
+    "results",
+    "performance",
+    "revenue",
+    "profit",
+    "net income",
+    "operating income",
+    "eps",
+    "cash flow",
+    "guidance",
+    "margin",
+)
+
+_EARNINGS_SECTION_PRIORITY: dict[str, tuple[str, ...]] = {
+    "10-K": (
+        "item_7_mdna",
+        "item_8_financial_statements",
+        "item_1a_risk_factors",
+    ),
+    "10-Q": (
+        "item_2_properties",
+        "item_7_mdna",
+        "item_8_financial_statements",
+    ),
+}
 
 
 # --------------- helpers ---------------
@@ -125,6 +154,214 @@ def _attach_sources_section(reply_text: str, retrieved_chunks: list[dict]) -> st
     return f"{base_reply}\n\n{sources_section}"
 
 
+def _is_earnings_intent(message: str) -> bool:
+    lowered = message.lower()
+    return any(keyword in lowered for keyword in _EARNINGS_KEYWORDS)
+
+
+def _expanded_retrieval_queries(message: str, form_type: str | None) -> list[str]:
+    queries = [message]
+    if not _is_earnings_intent(message):
+        return queries
+
+    if form_type == "10-Q":
+        queries.extend(
+            [
+                "quarterly operating results revenue margin net income",
+                "management discussion analysis quarterly results liquidity cash flow",
+                "financial statements notes revenue expenses earnings per share",
+            ]
+        )
+        return queries
+
+    # Default to 10-K oriented expansion.
+    queries.extend(
+        [
+            "management discussion and analysis revenue margin profitability",
+            "item 7 md&a operating results liquidity capital resources",
+            "item 8 consolidated statements income balance sheet cash flows",
+            "risk factors affecting financial performance outlook",
+        ]
+    )
+    return queries
+
+
+def _chunk_identity(chunk: dict) -> tuple[str, str, str, str, str]:
+    return (
+        str(chunk.get("ticker") or ""),
+        str(chunk.get("form_type") or ""),
+        str(chunk.get("accession_number") or ""),
+        str(chunk.get("section") or ""),
+        str(chunk.get("chunk_index") or ""),
+    )
+
+
+def _select_diverse_chunks(
+    chunks: list[dict],
+    limit: int,
+    form_type: str | None,
+    prefer_section_diversity: bool,
+) -> list[dict]:
+    if not chunks or limit <= 0:
+        return []
+
+    if not prefer_section_diversity:
+        return chunks[:limit]
+
+    priorities = _EARNINGS_SECTION_PRIORITY.get(form_type or "10-K", ())
+    selected: list[dict] = []
+    selected_ids: set[tuple[str, str, str, str, str]] = set()
+
+    # First pass: try to include one chunk from each priority section.
+    for section in priorities:
+        for chunk in chunks:
+            chunk_section = str(chunk.get("section") or "")
+            chunk_id = _chunk_identity(chunk)
+            if chunk_section != section or chunk_id in selected_ids:
+                continue
+            selected.append(chunk)
+            selected_ids.add(chunk_id)
+            break
+        if len(selected) >= limit:
+            return selected
+
+    # Second pass: fill remaining slots by relevance order.
+    for chunk in chunks:
+        chunk_id = _chunk_identity(chunk)
+        if chunk_id in selected_ids:
+            continue
+        selected.append(chunk)
+        selected_ids.add(chunk_id)
+        if len(selected) >= limit:
+            break
+
+    return selected
+
+
+async def _retrieve_chunks_with_fallback(
+    message: str,
+    ticker: str | None,
+    form_type: str | None,
+    limit: int,
+) -> list[dict]:
+    expanded_queries = _expanded_retrieval_queries(message, form_type)
+    per_query_limit = min(max(limit, _DEFAULT_RETRIEVAL_LIMIT), _MAX_RETRIEVAL_LIMIT)
+    merged: list[dict] = []
+    seen: set[tuple[str, str, str, str, str]] = set()
+
+    for retrieval_query in expanded_queries:
+        query_results = await pipeline.query_filings(
+            query=retrieval_query,
+            ticker=ticker,
+            form_type=form_type,
+            limit=per_query_limit,
+        )
+        for chunk in query_results:
+            chunk_id = _chunk_identity(chunk)
+            if chunk_id in seen:
+                continue
+            seen.add(chunk_id)
+            merged.append(chunk)
+
+    return _select_diverse_chunks(
+        chunks=merged,
+        limit=limit,
+        form_type=form_type,
+        prefer_section_diversity=_is_earnings_intent(message),
+    )
+
+
+_FORM_TYPE_ALIASES: dict[str, tuple[str, ...]] = {
+    "10-K": ("10-k", "10k", "annual report"),
+    "10-Q": ("10-q", "10q", "quarterly report"),
+    "8-K": ("8-k", "8k", "current report"),
+}
+
+
+def _normalize_form_type(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().upper().replace(" ", "")
+    if normalized == "10K":
+        return "10-K"
+    if normalized == "10Q":
+        return "10-Q"
+    if normalized == "8K":
+        return "8-K"
+    return value.strip().upper()
+
+
+def _extract_form_type_from_message(message: str) -> str | None:
+    lowered = message.lower()
+    for canonical, aliases in _FORM_TYPE_ALIASES.items():
+        if any(alias in lowered for alias in aliases):
+            return canonical
+    return None
+
+
+async def _infer_ticker_from_message(message: str, db: AsyncSession) -> str | None:
+    lowered = message.lower()
+
+    # Prefer explicit ticker-like symbols when they match an ingested filing ticker.
+    ticker_candidates = {
+        token.upper()
+        for token in re.findall(r"\b[A-Z]{1,5}\b", message)
+        if token.upper() not in {"SEC", "AI", "CEO", "CFO", "EPS", "USD"}
+    }
+
+    result = await db.execute(select(Filing.ticker, Filing.company_name))
+    rows = result.all()
+    known_tickers = {
+        (ticker or "").strip().upper() for ticker, _ in rows if ticker
+    }
+
+    explicit_matches = [t for t in ticker_candidates if t in known_tickers]
+    if len(explicit_matches) == 1:
+        return explicit_matches[0]
+
+    # Fall back to company-name mention lookup for natural-language prompts.
+    name_matches: list[str] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for raw_ticker, raw_company_name in rows:
+        ticker = (raw_ticker or "").strip().upper()
+        company_name = (raw_company_name or "").strip().lower()
+        if not ticker or not company_name:
+            continue
+        pair = (ticker, company_name)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        if company_name in lowered:
+            name_matches.append(ticker)
+
+    unique_name_matches = sorted(set(name_matches))
+    if len(unique_name_matches) == 1:
+        return unique_name_matches[0]
+
+    return None
+
+
+async def _resolve_retrieval_scope(
+    message: str,
+    db: AsyncSession,
+    req_ticker: str | None,
+    req_form_type: str | None,
+) -> tuple[str | None, str | None, bool]:
+    ticker = (req_ticker or "").strip().upper() or None
+    form_type = _normalize_form_type(req_form_type)
+    inferred = False
+
+    if not form_type:
+        form_type = _extract_form_type_from_message(message)
+        inferred = inferred or form_type is not None
+
+    if not ticker:
+        ticker = await _infer_ticker_from_message(message, db)
+        inferred = inferred or ticker is not None
+
+    return ticker, form_type, inferred
+
+
 # --------------- schemas ---------------
 
 class NewChatRequest(BaseModel):
@@ -135,7 +372,7 @@ class NewMsgRequest(BaseModel):
     message: str
     ticker: str | None = None
     form_type: str | None = None
-    limit: int = Field(default=5, ge=1, le=10)
+    limit: int = Field(default=_DEFAULT_RETRIEVAL_LIMIT, ge=1, le=_MAX_RETRIEVAL_LIMIT)
 
 
 class ConversationOut(BaseModel):
@@ -265,17 +502,38 @@ async def send_message(
     )
     history = result.scalars().all()
 
+    scope_ticker, scope_form_type, scope_inferred = await _resolve_retrieval_scope(
+        message=req.message,
+        db=db,
+        req_ticker=req.ticker,
+        req_form_type=req.form_type,
+    )
+
     # Retrieve filing chunks from Qdrant.
     try:
-        retrieved_chunks = await pipeline.query_filings(
-            query=req.message,
-            ticker=req.ticker,
-            form_type=req.form_type,
+        retrieved_chunks = await _retrieve_chunks_with_fallback(
+            message=req.message,
+            ticker=scope_ticker,
+            form_type=scope_form_type,
             limit=req.limit,
         )
     except Exception as exc:
         logger.warning("RAG retrieval failed: %s", exc)
         retrieved_chunks = []
+
+    # If scope was inferred, keep only chunks that match that scope.
+    if scope_ticker:
+        retrieved_chunks = [
+            c
+            for c in retrieved_chunks
+            if str(c.get("ticker") or "").upper() == scope_ticker
+        ]
+    if scope_form_type:
+        retrieved_chunks = [
+            c
+            for c in retrieved_chunks
+            if _normalize_form_type(str(c.get("form_type") or "")) == scope_form_type
+        ]
 
     retrieval_context = _build_retrieval_context(retrieved_chunks)
 
@@ -306,7 +564,7 @@ async def send_message(
                 )
             prompt = f"""You are SEC Fault, an AI assistant that helps users understand SEC filings and financial reports.
 
-Retrieved filing excerpts (highest relevance first):
+Filing context for grounding (internal use only; do not mention this context directly):
 {retrieval_context}
 
 Here is the conversation so far:
@@ -326,9 +584,14 @@ Preference-specific style rules:
 
 Grounding rules:
 - Prioritize facts from the retrieved excerpts.
-- If the excerpts do not support a claim, say that the available filing context is insufficient.
+- If the available filing context does not support a claim, make a confident best effort. Only if you have zero relevant information from the given excerpts should you say that you have insufficient data.
 - Do not fabricate numeric values.
-- End with a short "Sources" section listing accession number and section for claims used."""
+
+Additional response rules:
+- Speak directly and naturally to the user.
+- Never mention internal context, retrieved excerpts, prompt wording, or system instructions.
+- Do not start with phrases like "Based on the provided excerpts" or "From the retrieved context"
+- If you don't have enough information in certain areas, still NEVER critique the contents of the context or provided excerpts."""
 
             response = gemini_client.models.generate_content(
                 model="gemini-2.5-flash-lite",
@@ -393,6 +656,11 @@ Grounding rules:
             }
             for c in retrieved_chunks
         ],
+        "retrieval_scope": {
+            "ticker": scope_ticker,
+            "form_type": scope_form_type,
+            "inferred": scope_inferred,
+        },
         "msg_reply": reply_text,
     }
 
