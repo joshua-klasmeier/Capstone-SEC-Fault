@@ -239,3 +239,5 @@ async def delete_video_asset(
         await db.commit()
 
     return _video_pref_response(pref)
+
+# Why is the deployment not up to date
