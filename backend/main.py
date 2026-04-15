@@ -102,12 +102,25 @@ def _cookie_kwargs() -> dict:
         "path": "/",
     }
 
+
+def _normalize_next_path(next_path: str | None) -> str:
+    if not next_path:
+        return "/"
+    if not next_path.startswith("/"):
+        return "/"
+    if next_path.startswith("//"):
+        return "/"
+    return next_path
+
 @app.get("/auth/login", tags=[AUTH_TAG])
 async def login(request: Request):
     """
     Begin Google OAuth login by redirecting the user to Google's
     consent screen. The user will be sent back to /auth/callback.
     """
+    request.session["post_auth_redirect"] = _normalize_next_path(
+        request.query_params.get("next")
+    )
     return await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
 
 
@@ -119,6 +132,10 @@ async def auth_callback(request: Request):
     minimal HttpOnly cookie; future work can persist users and
     enforce auth on API routes.
     """
+    redirect_path = _normalize_next_path(
+        request.session.pop("post_auth_redirect", "/")
+    )
+
     try:
         token = await oauth.google.authorize_access_token(request)
     except Exception as exc:
@@ -151,19 +168,20 @@ async def auth_callback(request: Request):
             request.url.path,
             has_oauth_session_cookie,
         )
-        params = urlencode(
+        login_query = urlencode(
             {
+                "next": redirect_path,
                 "error": error_code,
                 "oauth_exc": exc.__class__.__name__,
                 "has_oauth_session": str(has_oauth_session_cookie).lower(),
                 "callback_path": request.url.path,
             }
         )
-        return RedirectResponse(url=f"{FRONTEND_URL}/login?{params}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?{login_query}")
 
     user_info = token.get("userinfo") or {}
 
-    response = RedirectResponse(url=FRONTEND_URL)
+    response = RedirectResponse(url=f"{FRONTEND_URL}{redirect_path}")
 
     # Store user display name and email in HttpOnly cookies so the
     # browser can prove it completed Google sign-in without exposing

@@ -2,19 +2,25 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   function handleGoogleLogin() {
     setLoading(true);
     setError(null);
 
     try {
-      window.location.href = apiUrl("/auth/login");
+      const nextPath = searchParams.get("next") || "/";
+      const loginUrl = apiUrl(
+        `/auth/login?next=${encodeURIComponent(nextPath)}`,
+      );
+      window.location.href = loginUrl;
     } catch (err) {
       setError("Unable to start Google sign-in. Please try again.");
       setLoading(false);
